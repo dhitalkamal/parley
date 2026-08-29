@@ -96,7 +96,7 @@ curl (macOS / Linux, no Go needed):
 
 Homebrew (macOS / Linux):
 
-    brew install dhitalkamal/parley/parley
+    brew install dhitalkamal/tap/parley
 
 Go (any platform, needs Go 1.26.5+; installs into `$(go env GOPATH)/bin`):
 
