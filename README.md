@@ -88,11 +88,17 @@ CI test-result dashboards.
 
 ## install
 
-Requires Go 1.26.5 or newer.
+macOS and Linux have prebuilt binaries; anything else uses Go.
 
-Install the latest release straight from the repo (puts `parley` in
-`$(go env GOBIN)`, or `$(go env GOPATH)/bin` - make sure that's on your
-`PATH`):
+curl (macOS / Linux, no Go needed):
+
+    curl -fsSL https://raw.githubusercontent.com/dhitalkamal/parley/main/install.sh | sh
+
+Homebrew (macOS / Linux):
+
+    brew install dhitalkamal/parley/parley
+
+Go (any platform, needs Go 1.26.5+; installs into `$(go env GOPATH)/bin`):
 
     go install github.com/dhitalkamal/parley/cmd/parley@latest
 
