@@ -1,0 +1,464 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>parley TUI redesign - clauth-style tabbed dashboard</title>
+<style>
+  /* palette mirrors internal/tui/theme.go so the mock previews real colors.
+     defaults are Ayu Midnight; the buttons swap every theme. */
+  :root {
+    --bg:#0b0e14; --panel:#0d1017; --panel-alt:#11151f; --fg:#bfbdb6; --fg-dim:#565b66;
+    --border:#2b303b; --focus:#59c2ff; --accent:#ffb454; --accent-fg:#0b0e14; --accent2:#59c2ff;
+    --m-get:#aad94c; --m-post:#ffb454; --m-put:#d2a6ff; --m-delete:#f07178;
+    --ok:#aad94c; --warn:#e6b450; --err:#f07178; --sel:#1b2531;
+  }
+  html,body{margin:0;background:#05070b;color:var(--fg);
+    font-family:"JetBrains Mono","SFMono-Regular",Menlo,Consolas,monospace;font-size:13px;line-height:1.5}
+  .wrap{max-width:1120px;margin:0 auto;padding:22px 16px 60px}
+  h1{font-size:15px;color:var(--fg);margin:0 0 4px}
+  .switcher{display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap}
+  .switcher span{color:#7a8290}
+  .switcher button{background:var(--panel-alt);color:var(--fg);border:1px solid var(--border);
+    padding:4px 12px;cursor:pointer;font-family:inherit;font-size:12px;border-radius:3px}
+  .switcher button:hover{border-color:var(--focus)}
+
+  .term{background:var(--bg);border:1px solid var(--border);border-radius:4px;overflow:hidden}
+  .row{display:flex;align-items:center}
+
+  /* header + tab strip (the clauth signature) */
+  .head{background:var(--panel-alt);padding:3px 12px;justify-content:space-between;border-bottom:1px solid var(--border)}
+  .brand{color:var(--accent);font-weight:700}
+  .head-right{display:flex;gap:14px;color:var(--fg-dim)}
+  .pill{padding:0 8px;border-radius:10px;font-weight:700;
+    background:color-mix(in srgb,var(--ok) 18%,transparent);color:var(--ok)}
+  .tabstrip{background:var(--panel-alt);padding:0 8px;border-bottom:1px solid var(--border);gap:2px}
+  .tab{padding:4px 14px;color:var(--fg-dim);cursor:pointer;border-bottom:2px solid transparent}
+  .tab:hover{color:var(--fg)}
+  .tab.active{color:var(--accent-fg);background:var(--accent);font-weight:700;border-radius:3px 3px 0 0}
+
+  .view{min-height:430px;padding:0}
+  .hide{display:none}
+
+  /* url bar */
+  .urlbar{padding:8px 12px;gap:10px;border-bottom:1px solid var(--border)}
+  .method{font-weight:700;color:var(--m-get);letter-spacing:.5px}
+  .url{flex:1;color:var(--fg)} .url .var{color:var(--accent2)}
+  .send{background:var(--accent);color:var(--accent-fg);font-weight:700;padding:1px 14px;border-radius:3px}
+
+  .split{display:flex;min-height:360px}
+  .col{flex:1;min-width:0}
+  .col.left{border-right:1px solid var(--border)}
+  .sect{padding:5px 12px;color:var(--fg-dim);font-weight:700;text-transform:uppercase;
+    font-size:11px;letter-spacing:.8px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between}
+  .sect .hint{font-weight:400;text-transform:none;letter-spacing:0}
+
+  .subtabs{padding:4px 12px;gap:16px;border-bottom:1px solid var(--border)}
+  .subtabs .st{color:var(--fg-dim)} .subtabs .st.on{color:var(--accent);font-weight:700;border-bottom:2px solid var(--accent);padding-bottom:2px}
+  .subtabs .c{color:var(--fg-dim);font-weight:400}
+
+  .kv{padding:6px 12px}
+  .kv .kr{display:flex;gap:10px;padding:1px 0}
+  .kv .kr.h{color:var(--fg-dim);border-bottom:1px solid var(--border);margin-bottom:3px;padding-bottom:3px}
+  .kv .k{width:150px;color:var(--accent2)} .kv .v{flex:1;color:var(--fg)}
+  .kv .sel{background:var(--sel)} .mk{color:var(--accent)}
+
+  .status{padding:5px 12px;gap:14px;border-bottom:1px solid var(--border)}
+  .c2xx{color:var(--ok);font-weight:700} .c4xx{color:var(--m-post);font-weight:700} .meta{color:var(--fg-dim)}
+  .json{padding:6px 12px;white-space:pre;color:var(--fg);font-size:12.5px}
+  .jk{color:var(--accent2)} .js{color:var(--ok)} .jn{color:var(--m-put)}
+
+  /* generic table (history) */
+  table{width:100%;border-collapse:collapse;font-size:12.5px}
+  th{color:var(--fg-dim);text-align:left;font-weight:400;padding:4px 12px;border-bottom:1px solid var(--border)}
+  td{padding:2px 12px;white-space:nowrap}
+  tr.sel td{background:var(--sel)}
+  .mget{color:var(--m-get);font-weight:700} .mpost{color:var(--m-post);font-weight:700}
+  .mput{color:var(--m-put);font-weight:700} .mdel{color:var(--m-delete);font-weight:700}
+
+  /* color-coded bars (the clauth usage-bar equivalent) */
+  .bar{display:inline-block;height:9px;border-radius:2px;vertical-align:middle}
+  .barbg{display:inline-block;width:120px;height:9px;background:var(--panel-alt);border-radius:2px;
+    vertical-align:middle;overflow:hidden}
+  .barbg .bar{height:9px;border-radius:0}
+  .runrow{padding:3px 12px;display:flex;gap:10px;align-items:center}
+  .runrow .name{width:150px;color:var(--fg)}
+  .runrow .t{width:60px;color:var(--fg-dim);text-align:right}
+  .ok{color:var(--ok)} .err{color:var(--err)} .warn{color:var(--warn)}
+  .summary{padding:8px 12px;border-bottom:1px solid var(--border);display:flex;gap:26px}
+  .stat{display:flex;flex-direction:column} .stat .big{font-size:20px;font-weight:700}
+  .stat .lbl{color:var(--fg-dim);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+
+  /* environments */
+  .envlist{width:220px;flex:0 0 220px;border-right:1px solid var(--border)}
+  .envrow{padding:3px 12px;cursor:default} .envrow.active{background:var(--accent);color:var(--accent-fg);font-weight:700}
+  .secret{color:var(--fg-dim);letter-spacing:2px}
+
+  /* settings swatches */
+  .swrow{padding:8px 12px;display:flex;gap:12px;flex-wrap:wrap}
+  .sw{border:1px solid var(--border);border-radius:4px;padding:8px;width:150px;cursor:pointer}
+  .sw.cur{border-color:var(--accent)} .sw .nm{margin-bottom:6px;color:var(--fg)}
+  .dots span{display:inline-block;width:12px;height:12px;border-radius:2px;margin-right:3px}
+  .opt{padding:4px 12px;color:var(--fg)} .opt .kbd{color:var(--accent);font-weight:700}
+
+  .ws{color:var(--fg-dim)} .ws b{color:var(--accent);font-weight:700} .ws .tw{color:var(--fg-dim);font-size:11px}
+
+  /* yazi-style collections: path bar, parent|current|preview panes, cursor bar */
+  .ypath{padding:5px 12px;border-bottom:1px solid var(--border);color:var(--fg-dim)}
+  .ypath b{color:var(--accent);font-weight:700} .ypath .sep{color:var(--fg-dim)}
+  .ypanes{display:flex;min-height:322px}
+  .ypane{border-right:1px solid var(--border);min-width:0;padding:4px 0}
+  /* asymmetric ratio (yazi 1:4:3): thin context parent, generous current+preview */
+  .ypane.parent{flex:0 0 165px}
+  .ypane.current{flex:1.3}
+  .ypane.preview{flex:1.75;border-right:none;background:var(--panel)}
+  .yrow{padding:2px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg)}
+  .yrow .cnt{color:var(--fg-dim);font-size:11px}
+  .yrow.dir{color:var(--accent2)}
+  .yrow.here{background:var(--sel)}                              /* parent: the folder we are inside */
+  .yrow.cur{background:var(--accent);color:var(--accent-fg);font-weight:700;border-radius:2px}  /* yazi cursor bar */
+  .yrow.cur .verb,.yrow.cur .cnt{color:var(--accent-fg)}
+  .ygrp{padding:3px 10px 0;color:var(--fg);font-weight:700;display:flex;gap:6px;align-items:center}
+  .ygrp .tw{color:var(--fg-dim);font-weight:400} .ygrp .badges{margin-left:auto;display:flex;gap:4px}
+  .yop{padding:1px 10px 1px 22px;display:flex;gap:8px} .yop .verb{width:56px;font-weight:700} .yop .nm{flex:1}
+  .ystatus{display:flex;justify-content:space-between;padding:3px 12px;border-top:1px solid var(--border);
+    background:var(--panel-alt);color:var(--fg-dim)}
+  .ystatus .mode{color:var(--accent);font-weight:700}
+  .pvh{padding:5px 12px 1px;color:var(--fg-dim);text-transform:uppercase;font-size:11px;letter-spacing:.6px}
+  .pv{padding:0 12px;color:var(--fg);font-size:12.5px;white-space:pre-wrap}
+  .pv .k{color:var(--accent2)} .pv .s{color:var(--ok)} .pv .n{color:var(--m-put)}
+
+  /* filled method chips, fixed width so lists align */
+  .chip{display:inline-block;min-width:50px;text-align:center;font-size:11px;font-weight:700;
+    padding:0 6px;border-radius:3px;letter-spacing:.3px}
+  .chip.get{background:color-mix(in srgb,var(--m-get) 20%,transparent);color:var(--m-get)}
+  .chip.post{background:color-mix(in srgb,var(--m-post) 20%,transparent);color:var(--m-post)}
+  .chip.put{background:color-mix(in srgb,var(--m-put) 20%,transparent);color:var(--m-put)}
+  .chip.del{background:color-mix(in srgb,var(--m-delete) 20%,transparent);color:var(--m-delete)}
+  /* on the yazi cursor bar, chips invert to stay legible on the accent fill */
+  .yrow.cur .chip{background:rgba(0,0,0,.18);color:var(--accent-fg)}
+
+  /* status chip */
+  .schip{display:inline-block;font-weight:700;padding:0 8px;border-radius:3px}
+  .schip.ok{background:color-mix(in srgb,var(--ok) 22%,transparent);color:var(--ok)}
+  .schip.err{background:color-mix(in srgb,var(--err) 22%,transparent);color:var(--err)}
+
+  /* timing waterfall - the API-client signature widget */
+  .wf{padding:4px 12px}
+  .wfrow{display:flex;align-items:center;gap:8px;padding:1px 0;font-size:12px}
+  .wfrow .lbl{width:70px;color:var(--fg-dim)}
+  .wftrack{flex:1;position:relative;height:10px;background:var(--panel-alt);border-radius:2px}
+  .wfseg{position:absolute;top:0;height:10px;border-radius:2px}
+  .wfrow .ms{width:48px;text-align:right;color:var(--fg-dim)}
+  /* compact single-line segmented total-time bar */
+  .tbar{display:flex;height:8px;border-radius:2px;overflow:hidden;width:180px}
+  .tbar span{height:8px}
+
+  /* line-numbered code (response body) */
+  .code{padding:4px 0;font-size:12.5px}
+  .cl{display:flex} .cl .ln{width:32px;text-align:right;padding-right:10px;color:var(--fg-dim)}
+  .cl .ct{white-space:pre}
+  .jk{color:var(--accent2)} .js{color:var(--ok)} .jn{color:var(--m-put)} .jb{color:var(--m-put)}
+
+  /* breadcrumb + miller columns for the workspace/collection/folder/request chain */
+  .crumb2{padding:5px 12px;color:var(--fg-dim);border-bottom:1px solid var(--border)}
+  .crumb2 b{color:var(--fg);font-weight:400} .crumb2 .sep{color:var(--fg-dim)}
+  .miller{display:flex;min-height:330px}
+  .mcol{flex:1;border-right:1px solid var(--border);min-width:0;padding-bottom:4px}
+  .mcol:last-child{border-right:none}
+  .chead{padding:4px 10px;color:var(--fg-dim);text-transform:uppercase;font-size:11px;letter-spacing:.6px;
+    border-bottom:1px solid var(--border);margin-bottom:3px}
+  .mcol.active .chead{color:var(--accent);font-weight:700}
+  .mitem{padding:2px 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--fg)}
+  .mitem .cnt{color:var(--fg-dim);font-size:11px}
+  .mitem.chosen{color:var(--accent2)}            /* the item this column drilled into */
+  .mitem.cur{background:var(--sel)}              /* cursor row in the active column */
+  .mitem .mk{color:var(--accent)}
+
+  /* endpoint-grouped collections: one path header, its methods branched under */
+  .grp{padding:4px 12px 1px;color:var(--fg);font-weight:700;display:flex;gap:8px;align-items:center;margin-top:2px}
+  .grp .tw{color:var(--fg-dim);font-weight:400} .grp .path{color:var(--fg)}
+  .grp .badges{margin-left:auto;display:flex;gap:5px}
+  .mini{font-size:10px;font-weight:700;padding:0 5px;border-radius:8px;border:1px solid var(--border)}
+  .oprow{padding:1px 12px 1px 30px;display:flex;gap:10px;align-items:center}
+  .oprow.sel{background:var(--sel)}
+  .oprow .verb{width:66px;font-weight:700} .oprow .nm{flex:1;color:var(--fg)} .oprow .lr{color:var(--fg-dim);font-size:12px}
+  .mget{color:var(--m-get)} .mpost{color:var(--m-post)} .mput{color:var(--m-put)} .mdel{color:var(--m-delete)}
+
+  .footer{background:var(--panel-alt);padding:3px 12px;color:var(--fg-dim);border-top:1px solid var(--border);gap:18px}
+  .footer b{color:var(--accent);font-weight:700}
+
+  /* segmented status line (yazi/powerline cue): mode + env block left,
+     live response chips right - the top premium signal from the research */
+  .statusline{display:flex;justify-content:space-between;align-items:center;
+    background:var(--panel-alt);border-top:1px solid var(--border);padding:3px 10px}
+  .statusline .left,.statusline .right{display:flex;align-items:center;gap:8px}
+  .seg{padding:0 9px;font-weight:700;border-radius:3px;font-size:12px}
+  .seg.mode{background:var(--accent);color:var(--accent-fg)}
+  .seg.env{background:color-mix(in srgb,var(--ok) 24%,transparent);color:var(--ok)}
+  .seg.prod{background:var(--err);color:#fff}                 /* PROD danger cue */
+  .seg.rok{background:color-mix(in srgb,var(--ok) 24%,transparent);color:var(--ok)}
+  .ctx{color:var(--fg-dim)} .keys{color:var(--fg-dim)} .keys b{color:var(--accent);font-weight:700}
+  .segms,.segsz{color:var(--fg-dim);font-size:12px}
+  /* dim what does not apply (slumber): tabs with no content greyed + un-selectable */
+  .subtabs .st.off{color:var(--fg-dim);opacity:.4}
+  .caption{color:#7a8290;margin:12px 2px;font-size:12px;line-height:1.7}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>parley redesign - clauth-style tabbed dashboard</h1>
+  <div class="switcher">
+    <span>theme:</span>
+    <button onclick="setTheme('ayu')">Ayu Midnight</button>
+    <button onclick="setTheme('gruvbox')">Gruvbox</button>
+    <button onclick="setTheme('matrix')">Matrix</button>
+    <button onclick="setTheme('paper')">Paper</button>
+    <span style="margin-left:12px">click the tabs to switch views</span>
+  </div>
+
+  <div class="term">
+    <!-- header -->
+    <div class="row head">
+      <div class="row" style="gap:14px">
+        <span class="brand">parley</span>
+        <span class="ws">workspace: <b>Acme</b> <span class="tw">F2 switch</span></span>
+      </div>
+      <div class="head-right"><span class="pill">local</span><span id="thName">Ayu Midnight</span><span>14:32:05</span></div>
+    </div>
+
+    <!-- tab strip: full-screen views, arrow-key nav like clauth -->
+    <div class="row tabstrip">
+      <span class="tab active" data-t="collections" onclick="go('collections')">1 Collections</span>
+      <span class="tab" data-t="request" onclick="go('request')">2 Request</span>
+      <span class="tab" data-t="envs" onclick="go('envs')">3 Environments</span>
+      <span class="tab" data-t="history" onclick="go('history')">4 History</span>
+      <span class="tab" data-t="runner" onclick="go('runner')">5 Runner</span>
+      <span class="tab" data-t="settings" onclick="go('settings')">6 Settings</span>
+    </div>
+
+    <!-- REQUEST view -->
+    <div class="view hide" data-v="request">
+      <div class="row urlbar">
+        <span class="method">GET</span>
+        <span class="url">https://<span class="var">{{host}}</span>/v1/users?limit=20</span>
+        <span class="send">Send</span>
+      </div>
+      <div class="split">
+        <div class="col left">
+          <div class="row subtabs">
+            <span class="st on">Params <span class="c">2</span></span><span class="st">Headers <span class="c">1</span></span>
+            <span class="st off" title="GET has no body">Body</span><span class="st off" title="no auth set">Auth</span><span class="st">Scripts</span>
+          </div>
+          <div class="kv">
+            <div class="kr h"><span class="k">key</span><span class="v">value</span></div>
+            <div class="kr sel"><span class="k"><span class="mk">></span> limit</span><span class="v">20</span></div>
+            <div class="kr"><span class="k">&nbsp;&nbsp; format</span><span class="v">json</span></div>
+          </div>
+        </div>
+        <div class="col">
+          <div class="row status">
+            <span class="schip ok">200 OK</span>
+            <span class="meta">142 ms</span>
+            <span class="tbar" title="dns tcp tls ttfb download">
+              <span style="width:6%;background:var(--m-put)"></span>
+              <span style="width:9%;background:var(--accent2)"></span>
+              <span style="width:12%;background:var(--m-post)"></span>
+              <span style="width:60%;background:var(--warn)"></span>
+              <span style="width:13%;background:var(--ok)"></span>
+            </span>
+            <span class="meta">1.2 KB . json</span>
+          </div>
+          <div class="row subtabs"><span class="st on">Body</span><span class="st">Headers <span class="c">8</span></span><span class="st">Cookies</span><span class="st">Tests <span class="c">3</span></span><span class="st">Timeline</span></div>
+          <div class="code">
+            <div class="cl"><span class="ln">1</span><span class="ct">{</span></div>
+            <div class="cl"><span class="ln">2</span><span class="ct">  <span class="jk">"total"</span>: <span class="jn">128</span>,</span></div>
+            <div class="cl"><span class="ln">3</span><span class="ct">  <span class="jk">"users"</span>: [</span></div>
+            <div class="cl"><span class="ln">4</span><span class="ct">    { <span class="jk">"id"</span>: <span class="jn">1</span>, <span class="jk">"name"</span>: <span class="js">"Ada Lovelace"</span> },</span></div>
+            <div class="cl"><span class="ln">5</span><span class="ct">    { <span class="jk">"id"</span>: <span class="jn">2</span>, <span class="jk">"name"</span>: <span class="js">"Alan Turing"</span> }</span></div>
+            <div class="cl"><span class="ln">6</span><span class="ct">  ]</span></div>
+            <div class="cl"><span class="ln">7</span><span class="ct">}</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COLLECTIONS view: workspace-scoped miller columns walk the deep
+         one-to-many chain (collection -> folder -> request), and the requests
+         column groups by endpoint path so a resource's methods cluster -->
+    <div class="view" data-v="collections">
+      <div class="ypath">Acme <span class="sep">/</span> Billing API <span class="sep">/</span> Invoices <span class="sep">/</span> <b>List invoices</b></div>
+      <div class="ypanes">
+
+        <!-- parent pane: folders of the current collection, current folder marked -->
+        <div class="ypane parent">
+          <div class="yrow dir here">Invoices/ <span class="cnt">6</span></div>
+          <div class="yrow dir">Webhooks/ <span class="cnt">3</span></div>
+          <div class="yrow dir">Refunds/ <span class="cnt">2</span></div>
+          <div class="yrow dir">Archived/ <span class="cnt">9</span></div>
+        </div>
+
+        <!-- current pane: plain flat request list, method chips, cursor bar -->
+        <div class="ypane current">
+          <div class="yrow cur yop"><span class="chip get">GET</span><span class="nm">List invoices</span><span class="cnt">142ms</span></div>
+          <div class="yrow yop"><span class="chip post">POST</span><span class="nm">Create invoice</span><span class="cnt">-</span></div>
+          <div class="yrow yop"><span class="chip get">GET</span><span class="nm">Get invoice</span><span class="cnt">31ms</span></div>
+          <div class="yrow yop"><span class="chip put">PUT</span><span class="nm">Update invoice</span><span class="cnt">-</span></div>
+          <div class="yrow yop"><span class="chip del">DEL</span><span class="nm">Delete invoice</span><span class="cnt">-</span></div>
+          <div class="yrow yop"><span class="chip post">POST</span><span class="nm">Pay invoice</span><span class="cnt">88ms</span></div>
+        </div>
+
+        <!-- preview pane: live detail of the highlighted request (yazi signature) -->
+        <div class="ypane preview">
+          <div class="pv" style="padding-top:6px"><span class="chip get">GET</span>  <b style="color:var(--fg)">List invoices</b></div>
+          <div class="pv" style="color:var(--fg-dim)">https://<span style="color:var(--accent2)">{{host}}</span>/v1/invoices?status=open&limit=50</div>
+          <div class="pvh">Query</div>
+          <div class="pv"><span class="k">status</span> = open      <span class="k">limit</span> = 50</div>
+          <div class="pvh">Headers</div>
+          <div class="pv"><span class="k">Accept</span>: application/json
+<span class="k">Authorization</span>: Bearer <span style="color:var(--accent2)">{{token}}</span></div>
+          <div class="pvh">Last response . <span class="schip ok">200 OK</span> <span style="color:var(--fg-dim)">1.2 KB</span></div>
+          <div class="wf">
+            <div class="wfrow"><span class="lbl">DNS</span><span class="wftrack"><span class="wfseg" style="left:0;width:6%;background:var(--m-put)"></span></span><span class="ms">4ms</span></div>
+            <div class="wfrow"><span class="lbl">Connect</span><span class="wftrack"><span class="wfseg" style="left:6%;width:9%;background:var(--accent2)"></span></span><span class="ms">12ms</span></div>
+            <div class="wfrow"><span class="lbl">TLS</span><span class="wftrack"><span class="wfseg" style="left:15%;width:12%;background:var(--m-post)"></span></span><span class="ms">18ms</span></div>
+            <div class="wfrow"><span class="lbl">TTFB</span><span class="wftrack"><span class="wfseg" style="left:27%;width:60%;background:var(--warn)"></span></span><span class="ms">90ms</span></div>
+            <div class="wfrow"><span class="lbl">Download</span><span class="wftrack"><span class="wfseg" style="left:87%;width:13%;background:var(--ok)"></span></span><span class="ms">18ms</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ystatus">
+        <span><span class="mode">NORMAL</span>   GET request   ready</span>
+        <span>request 1/6    17%</span>
+      </div>
+    </div>
+
+    <!-- ENVIRONMENTS view -->
+    <div class="view hide" data-v="envs">
+      <div class="split">
+        <div class="envlist">
+          <div class="sect"><span>Environments</span></div>
+          <div class="envrow active">> local</div>
+          <div class="envrow">&nbsp;&nbsp;staging</div>
+          <div class="envrow">&nbsp;&nbsp;prod</div>
+          <div class="envrow">&nbsp;&nbsp;globals</div>
+        </div>
+        <div class="col">
+          <div class="sect"><span>local . variables</span><span class="hint">a add   d delete   ctrl+u reveal</span></div>
+          <div class="kv">
+            <div class="kr h"><span class="k">key</span><span class="v">value</span></div>
+            <div class="kr sel"><span class="k"><span class="mk">></span> host</span><span class="v">api.dev.example.com</span></div>
+            <div class="kr"><span class="k">&nbsp;&nbsp; api_key</span><span class="v secret">................ 4f9a</span></div>
+            <div class="kr"><span class="k">&nbsp;&nbsp; timeout</span><span class="v">30</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HISTORY view -->
+    <div class="view hide" data-v="history">
+      <div class="sect"><span>History . last 50</span><span class="hint">enter restore   / filter   y copy curl</span></div>
+      <table>
+        <tr><th>Time</th><th>Method</th><th>URL</th><th>Status</th><th style="width:150px">Duration</th></tr>
+        <tr class="sel"><td>14:32:01</td><td><span class="mget">GET</span></td><td>/v1/users?limit=20</td><td class="ok">200</td><td><span class="barbg"><span class="bar" style="width:36%;background:var(--ok)"></span></span> 142ms</td></tr>
+        <tr><td>14:31:44</td><td><span class="mpost">POST</span></td><td>/v1/auth/login</td><td class="err">401</td><td><span class="barbg"><span class="bar" style="width:22%;background:var(--err)"></span></span> 88ms</td></tr>
+        <tr><td>14:30:12</td><td><span class="mget">GET</span></td><td>/v1/users/42</td><td class="ok">200</td><td><span class="barbg"><span class="bar" style="width:9%;background:var(--ok)"></span></span> 31ms</td></tr>
+        <tr><td>14:28:57</td><td><span class="mput">PUT</span></td><td>/v1/users/42</td><td class="warn">304</td><td><span class="barbg"><span class="bar" style="width:60%;background:var(--warn)"></span></span> 240ms</td></tr>
+        <tr><td>14:27:03</td><td><span class="mdel">DELETE</span></td><td>/v1/users/7</td><td class="ok">204</td><td><span class="barbg"><span class="bar" style="width:5%;background:var(--ok)"></span></span> 18ms</td></tr>
+      </table>
+    </div>
+
+    <!-- RUNNER view (clauth usage-bar aesthetic) -->
+    <div class="view hide" data-v="runner">
+      <div class="row summary">
+        <div class="stat"><span class="big ok">14</span><span class="lbl">passed</span></div>
+        <div class="stat"><span class="big err">2</span><span class="lbl">failed</span></div>
+        <div class="stat"><span class="big">16</span><span class="lbl">requests</span></div>
+        <div class="stat"><span class="big">1.9s</span><span class="lbl">total</span></div>
+        <div class="stat" style="flex:1;justify-content:center">
+          <span class="lbl">pass rate</span>
+          <span class="barbg" style="width:100%"><span class="bar" style="width:87%;background:var(--ok)"></span></span>
+        </div>
+      </div>
+      <div class="sect"><span>My API . run</span><span class="hint">r rerun   x stop   enter details</span></div>
+      <div class="runrow"><span class="name ok">[OK] List users</span><span class="barbg"><span class="bar" style="width:36%;background:var(--ok)"></span></span><span class="t">142ms</span></div>
+      <div class="runrow"><span class="name ok">[OK] Get user</span><span class="barbg"><span class="bar" style="width:9%;background:var(--ok)"></span></span><span class="t">31ms</span></div>
+      <div class="runrow"><span class="name err">[X ] Login</span><span class="barbg"><span class="bar" style="width:22%;background:var(--err)"></span></span><span class="t">88ms</span></div>
+      <div class="runrow"><span class="name ok">[OK] Create user</span><span class="barbg"><span class="bar" style="width:44%;background:var(--ok)"></span></span><span class="t">176ms</span></div>
+      <div class="runrow"><span class="name err">[X ] Delete user</span><span class="barbg"><span class="bar" style="width:14%;background:var(--err)"></span></span><span class="t">55ms</span></div>
+      <div class="runrow"><span class="name ok">[OK] Health</span><span class="barbg"><span class="bar" style="width:4%;background:var(--ok)"></span></span><span class="t">9ms</span></div>
+    </div>
+
+    <!-- SETTINGS view -->
+    <div class="view hide" data-v="settings">
+      <div class="sect"><span>Appearance</span><span class="hint">enter apply</span></div>
+      <div class="swrow">
+        <div class="sw cur"><div class="nm">Ayu Midnight</div><div class="dots"><span style="background:#0b0e14"></span><span style="background:#ffb454"></span><span style="background:#59c2ff"></span><span style="background:#aad94c"></span><span style="background:#f07178"></span></div></div>
+        <div class="sw"><div class="nm">Gruvbox</div><div class="dots"><span style="background:#1d2021"></span><span style="background:#fe8019"></span><span style="background:#83a598"></span><span style="background:#b8bb26"></span><span style="background:#fb4934"></span></div></div>
+        <div class="sw"><div class="nm">Matrix</div><div class="dots"><span style="background:#03110a"></span><span style="background:#c8ff5a"></span><span style="background:#39ffc2"></span><span style="background:#39ff88"></span><span style="background:#ff5f6e"></span></div></div>
+        <div class="sw"><div class="nm">Paper</div><div class="dots"><span style="background:#f4f1e8"></span><span style="background:#b5651d"></span><span style="background:#3a6ea5"></span><span style="background:#4a7c59"></span><span style="background:#b5433d"></span></div></div>
+      </div>
+      <div class="sect"><span>Layout</span></div>
+      <div class="opt"><span class="kbd">o</span>  request/response split: horizontal</div>
+      <div class="opt"><span class="kbd">w</span>  wrap response body: on</div>
+      <div class="opt"><span class="kbd">u</span>  mask secrets by default: on</div>
+    </div>
+
+    <!-- segmented status line -->
+    <div class="statusline">
+      <div class="left">
+        <span class="seg mode">NORMAL</span>
+        <span class="seg env">local</span>
+        <span class="ctx">Billing API / Invoices</span>
+      </div>
+      <div class="right">
+        <span class="seg rok">200 OK</span>
+        <span class="segms">142ms</span>
+        <span class="segsz">1.2 KB</span>
+        <span class="keys"><b>ctrl+k</b> palette   <b>?</b> keys</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="caption">
+    Model: clauth-style. Six full-screen tabs across the top (1-6 or left/right
+    arrows), active tab filled orange. Each tab is one focused view instead of
+    many competing panels. Color-coded bars carry meaning where they matter -
+    history duration, runner pass/fail, status class. One footer hint line plus
+    ? for the current tab's full keys (the old shortcuts rail and drifting help
+    surfaces are gone). Env lives in its own tab and the header pill.
+    Collections is a yazi-style file manager for the deep one-to-many chain
+    (workspace -> collection -> folder -> request). Workspace is the header scope
+    (F2 to switch). Three panes: parent (sibling folders, current one marked),
+    current (a plain flat request list with a solid cursor bar), and a live
+    preview of the highlighted request (method, URL, query, headers, last
+    response) - the yazi signature. h/l walk up and down the tree so the panes
+    slide, a path bar shows the full location, and a bottom status bar shows
+    position. On a narrow terminal the panes collapse to a single breadcrumb
+    drill-down.
+    Premium cues from posting/atac/slumber/yazi: a segmented status line (mode +
+    env block left, live response status/latency/size chips right; env turns red
+    for prod), one accent hue for every focus cue, yazi's asymmetric pane ratio
+    (thin parent, generous current + preview), filled method/status chips, and
+    dimming tabs that do not apply (a GET greys Body/Auth). The timing waterfall
+    is a genuine differentiator - none of those four tools has one.
+  </div>
+</div>
+
+<script>
+  const THEMES={
+    ayu:{bg:'#0b0e14',panel:'#0d1017','panel-alt':'#11151f',fg:'#bfbdb6','fg-dim':'#565b66',border:'#2b303b',focus:'#59c2ff',accent:'#ffb454','accent-fg':'#0b0e14',accent2:'#59c2ff','m-get':'#aad94c','m-post':'#ffb454','m-put':'#d2a6ff','m-delete':'#f07178',ok:'#aad94c',warn:'#e6b450',err:'#f07178',sel:'#1b2531',name:'Ayu Midnight'},
+    gruvbox:{bg:'#1d2021',panel:'#1d2021','panel-alt':'#282828',fg:'#ebdbb2','fg-dim':'#7c6f64',border:'#3c3836',focus:'#fabd2f',accent:'#fe8019','accent-fg':'#1d2021',accent2:'#83a598','m-get':'#b8bb26','m-post':'#fe8019','m-put':'#d3869b','m-delete':'#fb4934',ok:'#b8bb26',warn:'#fabd2f',err:'#fb4934',sel:'#32302f',name:'Gruvbox'},
+    matrix:{bg:'#03110a',panel:'#04160d','panel-alt':'#07200f',fg:'#7dffa1','fg-dim':'#2f7a4d',border:'#12482a',focus:'#39ff88',accent:'#c8ff5a','accent-fg':'#03110a',accent2:'#39ffc2','m-get':'#39ff88','m-post':'#c8ff5a','m-put':'#7dffcf','m-delete':'#ff5f6e',ok:'#39ff88',warn:'#c8ff5a',err:'#ff5f6e',sel:'#0c3a20',name:'Matrix'},
+    paper:{bg:'#f4f1e8',panel:'#faf8f1','panel-alt':'#efeadc',fg:'#3a372f','fg-dim':'#94907f',border:'#d3ccb8',focus:'#b5651d',accent:'#b5651d','accent-fg':'#f4f1e8',accent2:'#3a6ea5','m-get':'#4a7c59','m-post':'#b5651d','m-put':'#7a6bb5','m-delete':'#b5433d',ok:'#4a7c59',warn:'#a5761d',err:'#b5433d',sel:'#e6dcc0',name:'Paper'},
+  };
+  function setTheme(k){const t=THEMES[k],r=document.documentElement;
+    for(const p in t){if(p!=='name')r.style.setProperty('--'+p,t[p]);}
+    document.getElementById('thName').textContent=t.name;}
+  function go(v){
+    document.querySelectorAll('.view').forEach(e=>e.classList.toggle('hide',e.dataset.v!==v));
+    document.querySelectorAll('.tab').forEach(e=>e.classList.toggle('active',e.dataset.t===v));
+  }
+</script>
+</body>
+</html>

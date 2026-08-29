@@ -1,0 +1,13 @@
+/.idea/
+/.vscode/
+/parley
+*.exe
+/dist/
+*.test
+*.out
+/vendor/
+go.work
+go.work.sum
+.DS_Store
+*.swp
+/.claude/worktrees/
