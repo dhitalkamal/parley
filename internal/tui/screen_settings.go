@@ -72,5 +72,5 @@ func (m Model) settingsScreenView() string {
 
 	content := borderStyle.Render(strings.TrimRight(b.String(), "\n"))
 	status := labelStyle.Render(settingsStatusBar)
-	return padLinesTo(strings.Join([]string{content, status}, "\n"), m.height)
+	return m.screenFrame(content, status)
 }

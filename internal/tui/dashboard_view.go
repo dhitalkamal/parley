@@ -34,13 +34,10 @@ func (m Model) dashboardScreenView() string {
 
 	if len(m.dashboard.runs) == 0 {
 		content := borderStyle.Render(dashboardHeader() + "\n" + labelStyle.Render("No runs recorded yet"))
-		return padLinesTo(strings.Join([]string{content, status}, "\n"), m.height)
+		return m.screenFrame(content, status)
 	}
 
-	contentHeight := m.height - topBarHeight - tabStripHeight - helpBarHeight
-	if contentHeight < 3 {
-		contentHeight = 3
-	}
+	contentHeight := m.screenContentHeight()
 
 	if m.width < minWidthForDashboardSplit {
 		return m.dashboardNarrowView(status, contentHeight)
@@ -77,7 +74,7 @@ func (m Model) dashboardScreenView() string {
 		body += "\n\n" + clipToLines(m.dashboardPerformanceSection(m.width, perfHeight-1), perfHeight)
 	}
 
-	return padLinesTo(strings.Join([]string{body, status}, "\n"), m.height)
+	return m.screenFrame(body, status)
 }
 
 // dashboardNarrowView is the fallback below minWidthForDashboardSplit: one
@@ -100,7 +97,7 @@ func (m Model) dashboardNarrowView(status string, contentHeight int) string {
 
 	content := clipToLines(strings.Join(lines, "\n"), innerHeight)
 	box := borderStyle.Width(m.width - 2).Height(innerHeight).Render(content)
-	return padLinesTo(strings.Join([]string{box, status}, "\n"), m.height)
+	return m.screenFrame(box, status)
 }
 
 // dashboardOverviewLines is always exactly dashboardOverviewFixedHeight

@@ -19,6 +19,28 @@ func padLinesTo(s string, n int) string {
 	return s
 }
 
+// screenContentHeight is the row budget every full-frame screen has for its
+// body: the terminal height minus the fixed top bar, tab strip, and status
+// row, clamped to a 3-row floor so a tiny terminal never produces a negative
+// or degenerate budget. Shared so the clamp only lives in one place - see
+// screenFrame for the matching footer half.
+func (m Model) screenContentHeight() int {
+	h := m.height - topBarHeight - tabStripHeight - helpBarHeight
+	if h < 3 {
+		h = 3
+	}
+	return h
+}
+
+// screenFrame stacks a screen's body over its status bar and pads the result
+// to the full terminal height. Every full-frame screen (dashboard,
+// collections, settings) ends by returning this exact shape, so keeping the
+// join+pad in one place means a change to the footer/status layout or the
+// height clamp only happens once - see padLinesTo for why the pad matters.
+func (m Model) screenFrame(content, status string) string {
+	return padLinesTo(strings.Join([]string{content, status}, "\n"), m.height)
+}
+
 // Screen is which of parley's primary full-frame views is currently
 // rendered. Exactly one is active at a time; overlays (palette, confirm,
 // prompt, env panel, workspace switcher, etc.) float on top of whichever
