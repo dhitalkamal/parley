@@ -279,29 +279,6 @@ func (rv *responseView) scrollToFirstMatch(term string) {
 	}
 }
 
-func highlightSearch(content, term string) string {
-	if term == "" {
-		return content
-	}
-	lower := strings.ToLower(content)
-	lowerTerm := strings.ToLower(term)
-	var b strings.Builder
-	i := 0
-	for {
-		idx := strings.Index(lower[i:], lowerTerm)
-		if idx < 0 {
-			b.WriteString(content[i:])
-			break
-		}
-		start := i + idx
-		end := start + len(term)
-		b.WriteString(content[i:start])
-		b.WriteString(searchHighlightStyle.Render(content[start:end]))
-		i = end
-	}
-	return b.String()
-}
-
 // copiedConfirmationWindow is how long StatusLine keeps showing its
 // "Copied..." confirmation after a copy - it fades back to the normal
 // status line on its own (the app already repaints at least once a second
