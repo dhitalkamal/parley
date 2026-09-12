@@ -95,6 +95,10 @@ func (b bodyEditor) Body() collection.Body {
 }
 
 func (b *bodyEditor) SetBody(body collection.Body) {
+	// default to None so a Body whose Type matches nothing in bodyTypes
+	// (e.g. the empty-typed collection.Body{} used to clear the editor)
+	// falls back to None instead of keeping the previous request's index.
+	b.typeIdx = 0
 	for i, t := range bodyTypes {
 		if t == body.Type {
 			b.typeIdx = i
