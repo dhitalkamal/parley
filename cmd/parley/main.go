@@ -24,14 +24,23 @@ import (
 	workspacestore "github.com/dhitalkamal/parley/internal/workspace/infrastructure"
 )
 
+// version is the parley release, overridden at build time via
+// -ldflags "-X main.version=<tag>". "dev" for a plain `go build`.
+var version = "dev"
+
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "run" {
-		home, err := dataHome()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "error:", err)
-			os.Exit(cli.ExitUsageError)
-		}
-		os.Exit(runCLICommand(os.Args[2:], home, os.Stdout, os.Stderr))
+	home, err := dataHome()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(cli.ExitUsageError)
+	}
+
+	// dispatch handles every subcommand (run, version, help) and reports
+	// whether main should fall through to launching the TUI. Only bare
+	// `parley` reaches the TUI - an unknown subcommand errors instead of
+	// silently opening it, which used to surface as a cryptic /dev/tty error.
+	if code, launchTUI := dispatch(os.Args[1:], home, os.Stdout, os.Stderr); !launchTUI {
+		os.Exit(code)
 	}
 
 	m, err := buildModel()
@@ -44,6 +53,45 @@ func main() {
 		fmt.Fprintln(os.Stderr, "error:", err)
 		os.Exit(1)
 	}
+}
+
+// dispatch routes the top-level args to a subcommand and returns the exit
+// code plus whether main should launch the TUI. It takes home/stdout/stderr
+// as parameters (rather than reading globals) so it is testable without a
+// TTY or a subprocess.
+func dispatch(args []string, home string, stdout, stderr io.Writer) (exitCode int, launchTUI bool) {
+	if len(args) == 0 {
+		return 0, true
+	}
+	switch args[0] {
+	case "run":
+		return runCLICommand(args[1:], home, stdout, stderr), false
+	case "version", "--version", "-v":
+		fmt.Fprintf(stdout, "parley %s\n", version)
+		return 0, false
+	case "help", "--help", "-h":
+		printUsage(stdout)
+		return 0, false
+	default:
+		fmt.Fprintf(stderr, "parley: unknown command %q\n\n", args[0])
+		printUsage(stderr)
+		return cli.ExitUsageError, false
+	}
+}
+
+// printUsage writes the top-level command summary. Per-flag help for the run
+// subcommand lives in its own flag set (parley run --help).
+func printUsage(w io.Writer) {
+	fmt.Fprint(w, `parley - terminal API client
+
+Usage:
+  parley                       launch the interactive TUI
+  parley run [flags] [path]    run a saved collection or request headlessly
+  parley version               print the version
+  parley help                  show this help
+
+Run 'parley run --help' for the run flags.
+`)
 }
 
 // runCLICommand implements `parley run`: it resolves the workspace the same
@@ -61,10 +109,12 @@ func runCLICommand(args []string, home string, stdout, stderr io.Writer) int {
 	if err := fs.Parse(args); err != nil {
 		return cli.ExitUsageError
 	}
-	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "usage: parley run [flags] <collection-or-request-path>")
+	if fs.NArg() > 1 {
+		fmt.Fprintln(stderr, "usage: parley run [flags] [collection-or-request-path]")
 		return cli.ExitUsageError
 	}
+	// no path arg means "the whole collection" - cli.ResolveRequestPaths
+	// treats an empty path as the tree root.
 	path := fs.Arg(0)
 
 	wsStore := workspacestore.New(filepath.Join(home, "workspaces.json"))

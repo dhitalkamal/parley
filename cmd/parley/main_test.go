@@ -78,11 +78,109 @@ func seedHome(t *testing.T, dir, wsName, url string) {
 	}
 }
 
-func TestRunCLICommand_MissingPathArgReturnsUsageError(t *testing.T) {
+func TestRunCLICommand_NoPathRunsWholeCollection(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	seedHome(t, home, "Personal", server.URL)
+
+	// no path arg means "the whole collection" per the README and
+	// cli.ResolveRequestPaths - it must run, not print a usage error.
 	var stdout, stderr bytes.Buffer
-	code := runCLICommand([]string{}, t.TempDir(), &stdout, &stderr)
+	code := runCLICommand([]string{}, home, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\nstdout:\n%s\nstderr:\n%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "PASS") {
+		t.Errorf("expected PASS in stdout, got:\n%s", stdout.String())
+	}
+}
+
+func TestRunCLICommand_TooManyArgsReturnsUsageError(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := runCLICommand([]string{"one", "two"}, t.TempDir(), &stdout, &stderr)
 	if code != 2 {
 		t.Errorf("exit code = %d, want 2", code)
+	}
+}
+
+func TestDispatch_NoArgsLaunchesTUI(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code, launchTUI := dispatch(nil, t.TempDir(), &stdout, &stderr)
+	if !launchTUI {
+		t.Error("expected bare parley to launch the TUI")
+	}
+	if code != 0 {
+		t.Errorf("exit code = %d, want 0", code)
+	}
+}
+
+func TestDispatch_VersionPrintsVersionWithoutTUI(t *testing.T) {
+	for _, arg := range []string{"version", "--version", "-v"} {
+		var stdout, stderr bytes.Buffer
+		code, launchTUI := dispatch([]string{arg}, t.TempDir(), &stdout, &stderr)
+		if launchTUI {
+			t.Errorf("%s: expected no TUI launch", arg)
+		}
+		if code != 0 {
+			t.Errorf("%s: exit code = %d, want 0", arg, code)
+		}
+		if !strings.Contains(stdout.String(), "parley") {
+			t.Errorf("%s: expected version output to mention parley, got:\n%s", arg, stdout.String())
+		}
+	}
+}
+
+func TestDispatch_HelpPrintsUsageWithoutTUI(t *testing.T) {
+	for _, arg := range []string{"help", "--help", "-h"} {
+		var stdout, stderr bytes.Buffer
+		code, launchTUI := dispatch([]string{arg}, t.TempDir(), &stdout, &stderr)
+		if launchTUI {
+			t.Errorf("%s: expected no TUI launch", arg)
+		}
+		if code != 0 {
+			t.Errorf("%s: exit code = %d, want 0", arg, code)
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "Usage") || !strings.Contains(out, "run") {
+			t.Errorf("%s: expected usage text mentioning run, got:\n%s", arg, out)
+		}
+	}
+}
+
+func TestDispatch_UnknownCommandReturnsUsageErrorWithoutTUI(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code, launchTUI := dispatch([]string{"bogus"}, t.TempDir(), &stdout, &stderr)
+	if launchTUI {
+		t.Error("expected an unknown command to error, not launch the TUI")
+	}
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
+	}
+	if !strings.Contains(stderr.String(), "unknown command") {
+		t.Errorf("expected an unknown-command message on stderr, got:\n%s", stderr.String())
+	}
+}
+
+func TestDispatch_RunDelegatesToRunCLICommand(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	home := t.TempDir()
+	seedHome(t, home, "Personal", server.URL)
+
+	var stdout, stderr bytes.Buffer
+	code, launchTUI := dispatch([]string{"run", "ping"}, home, &stdout, &stderr)
+	if launchTUI {
+		t.Error("expected run to execute headlessly, not launch the TUI")
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0\nstderr:\n%s", code, stderr.String())
 	}
 }
 
