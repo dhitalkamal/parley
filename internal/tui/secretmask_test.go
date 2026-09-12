@@ -1,6 +1,11 @@
 package tui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	collection "github.com/dhitalkamal/parley/internal/collection/domain"
+)
 
 func TestLooksLikeSecretKey_MatchesCaseInsensitiveSubstrings(t *testing.T) {
 	cases := []struct {
@@ -46,5 +51,29 @@ func TestMaskedValue_MasksOnlySecretLookingKeysUnlessRevealed(t *testing.T) {
 	}
 	if got := maskedValue("password", "", false); got != "" {
 		t.Errorf("got %q, want empty value left as empty rather than masked", got)
+	}
+}
+
+func TestFormatHeaders_MasksSecretValuesUnlessRevealed(t *testing.T) {
+	headers := []collection.Header{
+		{Key: "Content-Type", Value: "application/json"},
+		{Key: "Set-Cookie", Value: "session=abc123secret"},
+		{Key: "x-api-key", Value: "live_xyz"},
+	}
+	// masked: non-secret header stays, secret header values are hidden
+	out := formatHeaders(headers, false)
+	if !strings.Contains(out, "Content-Type: application/json") {
+		t.Errorf("non-secret header should render verbatim, got:\n%s", out)
+	}
+	if strings.Contains(out, "session=abc123secret") {
+		t.Errorf("Set-Cookie value must be masked in the headers tab, got:\n%s", out)
+	}
+	if strings.Contains(out, "live_xyz") {
+		t.Errorf("x-api-key value must be masked in the headers tab, got:\n%s", out)
+	}
+	// revealed: everything visible
+	shown := formatHeaders(headers, true)
+	if !strings.Contains(shown, "session=abc123secret") || !strings.Contains(shown, "live_xyz") {
+		t.Errorf("reveal=true must show secret header values, got:\n%s", shown)
 	}
 }

@@ -210,7 +210,7 @@ func (rv *responseView) refresh() {
 		content = DetectAndRender(rv.rawBody, rv.contentType, true, rv.revealSecrets)
 		content = highlightSearch(content, rv.searchTerm)
 	case viewHeaders:
-		content = formatHeaders(rv.headers)
+		content = formatHeaders(rv.headers, rv.revealSecrets)
 	case viewCookies:
 		content = rv.cookiesText()
 	case viewTests:
@@ -222,13 +222,16 @@ func (rv *responseView) refresh() {
 	rv.vp.SetContent(rv.visualContent(content))
 }
 
-func formatHeaders(headers []collection.Header) string {
+func formatHeaders(headers []collection.Header, reveal bool) string {
 	if len(headers) == 0 {
 		return labelStyle.Render("(no headers)")
 	}
 	var b strings.Builder
 	for _, h := range headers {
-		fmt.Fprintf(&b, "%s: %s\n", h.Key, h.Value)
+		// mask secret-looking header values (Authorization, Set-Cookie,
+		// x-api-key, ...) unless the user toggled reveal - the headers tab
+		// used to print every value verbatim, exposing them on screen-share.
+		fmt.Fprintf(&b, "%s: %s\n", h.Key, maskedValue(h.Key, h.Value, reveal))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
