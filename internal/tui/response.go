@@ -463,8 +463,12 @@ func (rv responseView) Update(msg tea.Msg) (responseView, tea.Cmd) {
 	var cmd tea.Cmd
 	rv.vp, cmd = rv.vp.Update(msg)
 	// While selecting, moving the cursor (scroll) extends the highlight.
+	// Only the selection overlay moves - the rendered body is identical
+	// across scrolls - so repaint just the overlay instead of re-running
+	// refresh()'s full DetectAndRender/highlight/split over the whole body
+	// on every j/k keystroke (that was per-keystroke lag on large bodies).
 	if rv.visualActive {
-		rv.refresh()
+		rv.refreshVisualOverlay()
 	}
 	return rv, cmd
 }

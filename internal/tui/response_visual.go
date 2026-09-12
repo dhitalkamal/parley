@@ -31,6 +31,17 @@ func (rv responseView) visualContent(content string) string {
 	return strings.Join(lines, "\n")
 }
 
+// refreshVisualOverlay repaints only the Visual selection highlight from the
+// already-rendered lines, skipping refresh()'s expensive body formatting
+// (DetectAndRender + syntax highlight + secret masking + line split). While
+// Visual mode is active the rendered body never changes across scrolls - only
+// the selected range moves - and visualContent rebuilds purely from
+// rv.renderedLines when active (its content argument is ignored), so passing an
+// empty string here is safe. Callers must only use this while visualActive.
+func (rv *responseView) refreshVisualOverlay() {
+	rv.vp.SetContent(rv.visualContent(""))
+}
+
 // visualRange is the selected line range [lo, hi], clamped to the content.
 func (rv responseView) visualRange() (int, int) {
 	lo, hi := rv.visualAnchor, rv.vp.YOffset
