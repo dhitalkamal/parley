@@ -90,7 +90,8 @@ Usage:
   parley version               print the version
   parley help                  show this help
 
-Run 'parley run --help' for the run flags.
+Run 'parley run --help' for the run flags. Inside the TUI, press ? for
+keybindings and ctrl+k for the command palette.
 `)
 }
 
