@@ -341,6 +341,37 @@ func TestStore_TreePopulatesRequestMethod(t *testing.T) {
 	}
 }
 
+// TestStore_TreeReflectsMethodChangeAfterUpdate guards the method cache that
+// Tree() uses to avoid re-reading every request file on each call: a request
+// edited in place (even to a same-length method, so the file size is
+// unchanged) must still show its new method on the next Tree(). If the cache
+// keyed only on size and skipped modtime, this would return the stale method.
+func TestStore_TreeReflectsMethodChangeAfterUpdate(t *testing.T) {
+	s := New(t.TempDir())
+	path, err := s.SaveRequest("", "req", collection.Request{Method: collection.GET, URL: "https://example.com"})
+	if err != nil {
+		t.Fatalf("save error: %v", err)
+	}
+
+	// Warm the cache.
+	if _, err := s.Tree(); err != nil {
+		t.Fatalf("tree error: %v", err)
+	}
+
+	// PUT is the same length as GET, so only a modtime check catches this.
+	if err := s.UpdateRequest(path, collection.Request{Method: collection.PUT, URL: "https://example.com"}); err != nil {
+		t.Fatalf("update error: %v", err)
+	}
+
+	tree, err := s.Tree()
+	if err != nil {
+		t.Fatalf("tree error: %v", err)
+	}
+	if got := tree.Children[0].Method; got != collection.PUT {
+		t.Errorf("Children[0].Method = %q, want %q (stale cache after update)", got, collection.PUT)
+	}
+}
+
 // TestStore_TreeLeavesFolderMethodEmpty documents that Method is only
 // meaningful for request nodes - a folder has no HTTP method of its own.
 func TestStore_TreeLeavesFolderMethodEmpty(t *testing.T) {
