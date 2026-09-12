@@ -9,14 +9,6 @@ import (
 	execution "github.com/dhitalkamal/parley/internal/execution/domain"
 )
 
-func (m Model) envLabel() string {
-	name := m.activeEnvName
-	if name == "" {
-		name = "none"
-	}
-	return labelStyle.Render("Env: ") + statusStyle.Render(name)
-}
-
 // resolvedVars merges globals and the active environment per the
 // env-overrides-globals precedence in execution.ResolveVariables.
 func (m Model) resolvedVars() map[string]environment.Variable {
