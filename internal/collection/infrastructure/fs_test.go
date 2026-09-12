@@ -1,6 +1,7 @@
 package collectionstore
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -263,6 +264,49 @@ func TestStore_SaveRequestRejectsInvalidName(t *testing.T) {
 	req := collection.Request{Method: collection.GET, URL: "https://example.com"}
 	if _, err := s.SaveRequest("", "../escape", req); err == nil {
 		t.Fatal("expected error for path-escaping name")
+	}
+}
+
+// TestStore_LoadRequestRejectsPathTraversal guards against a crafted or
+// imported request whose refresh.requestPath points outside the collections
+// root (e.g. ../../../../etc/some.json). filepath.Join cleans ".." but does
+// not contain it, so without the resolve guard LoadRequest would read
+// arbitrary files whose contents could then be substituted and sent.
+func TestStore_LoadRequestRejectsPathTraversal(t *testing.T) {
+	root := t.TempDir()
+	// write a valid request JSON one level above the root to prove the read
+	// would otherwise succeed against an outside file.
+	outside := filepath.Join(root, "..", "outside.json")
+	if err := os.WriteFile(outside, []byte(`{"method":"GET","url":"https://evil.example"}`), 0o644); err != nil {
+		t.Fatalf("setup write error: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(outside) })
+
+	s := New(root)
+	for _, p := range []string{"../outside.json", "../../etc/passwd", "sub/../../outside.json"} {
+		if _, err := s.LoadRequest(p); err == nil {
+			t.Errorf("expected error for traversal path %q, got nil", p)
+		}
+	}
+}
+
+// TestStore_MutatingMethodsRejectPathTraversal covers the write-side joins
+// that share the same unbounded behavior as LoadRequest.
+func TestStore_MutatingMethodsRejectPathTraversal(t *testing.T) {
+	s := New(t.TempDir())
+	req := collection.Request{Method: collection.GET, URL: "https://example.com"}
+
+	if _, err := s.SaveRequest("../escape-dir", "req", req); err == nil {
+		t.Error("SaveRequest: expected error for traversal parent path")
+	}
+	if err := s.UpdateRequest("../escape.json", req); err == nil {
+		t.Error("UpdateRequest: expected error for traversal path")
+	}
+	if err := s.Delete("../escape.json"); err == nil {
+		t.Error("Delete: expected error for traversal path")
+	}
+	if _, err := s.CreateFolder("../escape-dir", "folder"); err == nil {
+		t.Error("CreateFolder: expected error for traversal parent path")
 	}
 }
 

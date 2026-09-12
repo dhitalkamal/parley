@@ -70,6 +70,22 @@ func (s *Store) listSiblings(parentAbs string) ([]siblingEntry, error) {
 	return out, nil
 }
 
+// resolve joins the caller-supplied relative path onto Root and confirms the
+// cleaned result stays inside Root. filepath.Join cleans ".." segments but
+// does not contain them, so a path like "../../etc/x.json" would otherwise
+// read or write outside the collections root. Some paths originate from
+// imported or shared request files (e.g. refresh.requestPath deserialized
+// verbatim), so this guard is what stops a crafted collection from reaching
+// arbitrary files on disk.
+func (s *Store) resolve(path string) (string, error) {
+	abs := filepath.Join(s.Root, path)
+	rel, err := filepath.Rel(s.Root, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("store: path escapes collections root: %s", path)
+	}
+	return abs, nil
+}
+
 // dirOf is filepath.Dir but returns "" instead of "." for a top-level path,
 // matching the convention that the collections root is the empty path.
 func dirOf(p string) string {
@@ -127,7 +143,11 @@ func (s *Store) buildNode(absDir, relPath string) (collection.TreeNode, error) {
 }
 
 func (s *Store) LoadRequest(path string) (collection.Request, error) {
-	data, err := os.ReadFile(filepath.Join(s.Root, path))
+	abs, err := s.resolve(path)
+	if err != nil {
+		return collection.Request{}, err
+	}
+	data, err := os.ReadFile(abs)
 	if err != nil {
 		return collection.Request{}, err
 	}
@@ -138,7 +158,10 @@ func (s *Store) SaveRequest(parentPath, name string, req collection.Request) (st
 	if err := fsstore.ValidateName(name); err != nil {
 		return "", err
 	}
-	parentAbs := filepath.Join(s.Root, parentPath)
+	parentAbs, err := s.resolve(parentPath)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(parentAbs, 0o755); err != nil {
 		return "", err
 	}
@@ -162,18 +185,25 @@ func (s *Store) SaveRequest(parentPath, name string, req collection.Request) (st
 }
 
 func (s *Store) UpdateRequest(path string, req collection.Request) error {
+	abs, err := s.resolve(path)
+	if err != nil {
+		return err
+	}
 	data, err := encodeRequest(req)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.Root, path), data, 0o644)
+	return os.WriteFile(abs, data, 0o644)
 }
 
 func (s *Store) CreateFolder(parentPath, name string) (string, error) {
 	if err := fsstore.ValidateName(name); err != nil {
 		return "", err
 	}
-	parentAbs := filepath.Join(s.Root, parentPath)
+	parentAbs, err := s.resolve(parentPath)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(parentAbs, 0o755); err != nil {
 		return "", err
 	}
@@ -206,14 +236,26 @@ func (s *Store) Rename(path, newName string) (string, error) {
 	}
 	parentPath := dirOf(path)
 	newPath := filepath.Join(parentPath, newBase)
-	if err := os.Rename(filepath.Join(s.Root, path), filepath.Join(s.Root, newPath)); err != nil {
+	oldAbs, err := s.resolve(path)
+	if err != nil {
+		return "", err
+	}
+	newAbs, err := s.resolve(newPath)
+	if err != nil {
+		return "", err
+	}
+	if err := os.Rename(oldAbs, newAbs); err != nil {
 		return "", err
 	}
 	return newPath, nil
 }
 
 func (s *Store) Delete(path string) error {
-	return os.RemoveAll(filepath.Join(s.Root, path))
+	abs, err := s.resolve(path)
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(abs)
 }
 
 func (s *Store) MoveUp(path string) error {
@@ -229,7 +271,10 @@ func (s *Store) MoveDown(path string) error {
 // next), renaming both on disk. A no-op at either end of the sibling list.
 func (s *Store) swapWithSibling(path string, offset int) error {
 	parentPath := dirOf(path)
-	parentAbs := filepath.Join(s.Root, parentPath)
+	parentAbs, err := s.resolve(parentPath)
+	if err != nil {
+		return err
+	}
 	siblings, err := s.listSiblings(parentAbs)
 	if err != nil {
 		return err
