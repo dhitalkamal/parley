@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	execution "github.com/dhitalkamal/parley/internal/execution/domain"
-	history "github.com/dhitalkamal/parley/internal/history/domain"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -78,7 +77,7 @@ func (m Model) dashboardScreenView() string {
 		strings.Repeat("-", m.width),
 		"",
 	}
-	lines = append(lines, dashboardOverviewLines(m.dashboard.runs)...)
+	lines = append(lines, dashboardOverviewLines(m.dashboard.overview)...)
 	lines = append(lines, "")
 	body := strings.Join(lines, "\n") + "\n" + m.dashboardSplitView(m.width, splitHeight, shown, len(filtered))
 	if perfHeight > 0 {
@@ -101,7 +100,7 @@ func (m Model) dashboardNarrowView(status string, contentHeight int, shown []das
 		strings.Repeat("-", innerWidth),
 		"",
 	}
-	lines = append(lines, dashboardOverviewLines(m.dashboard.runs)...)
+	lines = append(lines, dashboardOverviewLines(m.dashboard.overview)...)
 	lines = append(lines, "", labelStyle.Render("RUN HISTORY"), "")
 	lines = append(lines, strings.Split(m.dashboardRunHistoryContent(innerWidth, maxDashboardRunsShown, shown, filteredLen), "\n")...)
 	lines = append(lines, "", m.dashboardPerformanceSection(innerWidth, 8))
@@ -114,8 +113,7 @@ func (m Model) dashboardNarrowView(status string, contentHeight int, shown []das
 // dashboardOverviewLines is always exactly dashboardOverviewFixedHeight
 // lines: the section label, a blank, and a header+value row pair of the
 // five aggregate stats - see computeDashboardOverview.
-func dashboardOverviewLines(runs []history.CollectionRunEntry) []string {
-	ov := computeDashboardOverview(runs)
+func dashboardOverviewLines(ov dashboardOverview) []string {
 	header := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
 		dashboardStatColWidth, "Runs", dashboardStatColWidth, "Passed", dashboardStatColWidth, "Failed",
 		dashboardStatColWidth, "Pass Rate", dashboardStatColWidth, "Avg Duration")
