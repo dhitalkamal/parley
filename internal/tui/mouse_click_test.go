@@ -23,7 +23,7 @@ func TestHandleMouse_DrawerClickSelectsSidebarItem(t *testing.T) {
 	m.refreshTree()
 	m.width, m.height = 140, 44
 	m.screen = ScreenRequest
-	m.openDrawer()
+	m.drawerVisible = true
 
 	panelTop := drawerTop()
 	// Row 0 is the drawer's own top border, row 1 the list's reserved
@@ -50,11 +50,11 @@ func TestHandleMouse_ClickingOutsideDrawerMovesFocusWithoutClosingIt(t *testing.
 	m := New(t.TempDir(), t.TempDir())
 	m.width, m.height = 140, 44
 	m.screen = ScreenRequest
-	m.openDrawer()
+	m.drawerVisible = true
 
 	// Click in the request zone (center column, below the url row), beside the
 	// still-open Explorer.
-	got, _ := m.Update(press(m.drawerWidth()+5, gridTop()+1))
+	got, _ := m.Update(press(m.leftSidebarWidth()+5, gridTop()+1))
 	after := got.(Model)
 
 	if !after.drawerOpen() {
@@ -80,7 +80,7 @@ func TestHandleMouse_ClickDrawerWhileFocusIsElsewhereRefocusesIt(t *testing.T) {
 		t.Fatalf("CreateFolder: %v", err)
 	}
 	m.refreshTree()
-	m.openDrawer()
+	m.drawerVisible = true
 	m.focus = focusRequest // simulate having already tabbed/clicked away
 	m.updateFocus()
 
@@ -152,7 +152,7 @@ func TestHandleMouse_ClickDrawerRowFocusesAndLoadsRequest(t *testing.T) {
 		t.Fatalf("save error: %v", err)
 	}
 	m.refreshTree()
-	m.openDrawer()
+	m.drawerVisible = true
 
 	y := drawerTop() + 2 // border(1) + reserved row(1)
 	got, _ := m.Update(press(2, y))
@@ -172,7 +172,7 @@ func TestHandleMouse_ClickRequestTabSwitchesTab(t *testing.T) {
 	m := New(t.TempDir(), t.TempDir())
 	m.width, m.height = 140, 44
 	m.screen = ScreenRequest
-	m.closeDrawer()
+	m.drawerVisible = false
 	// The workspace is offset right by the left sidebar now - use the same
 	// geometry+offset the renderer/click-handler use so the click lands in the
 	// request panel's tab bar.
@@ -197,7 +197,7 @@ func TestHandleMouse_ClickResponseTabSwitchesMode(t *testing.T) {
 	m := New(t.TempDir(), t.TempDir())
 	m.width, m.height = 140, 44
 	m.screen = ScreenRequest
-	m.closeDrawer()
+	m.drawerVisible = false
 	// A response has to exist first - the response zone doesn't render at
 	// all otherwise (see workspaceView).
 	m.response.SetResponse(execution.Response{StatusCode: 200, Status: "200 OK"}, 10)
@@ -230,7 +230,7 @@ func TestHandleMouse_WheelDownOverDrawerMovesCursor(t *testing.T) {
 		t.Fatalf("save error: %v", err)
 	}
 	m.refreshTree()
-	m.openDrawer()
+	m.drawerVisible = true
 	before, _ := m.sidebar.Selected()
 
 	msg := tea.MouseMsg{X: 2, Y: drawerTop() + 2, Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown}

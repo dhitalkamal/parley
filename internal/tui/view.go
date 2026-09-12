@@ -169,15 +169,11 @@ func (m Model) View() string {
 	return background
 }
 
-// envDropdownAnchor positions the quick-switch dropdown just under the
-// environment pill in the top bar - the pill is the primary switcher now
-// (the url row keeps a color-matched echo instead, see urlRowView). x
-// mirrors where colorizeEnvSegment finds and colors that same segment, so
-// the dropdown always opens directly under it regardless of workspace/
-// theme name length shifting its position. The reference time passed to
-// topBarContent doesn't affect this - the clock segment is always exactly
-// 8 characters ("15:04:05" - width, not value), so the pill's position
-// never drifts with the actual time.
+// envDropdownAnchor positions the quick-switch dropdown next to the
+// Environment panel on the Request screen (the top bar that used to host an
+// environment pill was removed - the panel is the switcher now, with the
+// url row keeping a color-matched echo, see urlRowView). Falls back to the
+// top-left corner when that panel isn't on screen.
 func (m Model) envDropdownAnchor() (x, y int) {
 	// Aligned with the Active selector line (row 1: past the panel's top
 	// border), and opened to the LEFT of the Environment panel rather than

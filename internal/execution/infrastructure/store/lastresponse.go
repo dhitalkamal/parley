@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 
 	collection "github.com/dhitalkamal/parley/internal/collection/domain"
 	execution "github.com/dhitalkamal/parley/internal/execution/domain"
@@ -63,7 +64,15 @@ func (s *LastResponseStore) writeAll(entries map[string]lastResponseEntry) error
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path(), data, 0o644)
+	// last_responses.json holds full response headers and bodies, including
+	// Set-Cookie session cookies and any tokens/PII in the payload; keep it
+	// owner-only so other local users cannot read live session material.
+	if err := os.WriteFile(s.path(), data, 0o600); err != nil {
+		return err
+	}
+	// WriteFile only applies the mode when creating the file; chmod covers a
+	// file left world/group readable by an earlier version.
+	return os.Chmod(s.path(), 0o600)
 }
 
 func (s *LastResponseStore) Save(requestPath string, resp execution.Response, elapsedMS int64) error {
@@ -98,14 +107,25 @@ func (s *LastResponseStore) Load(requestPath string) (resp execution.Response, e
 	}, entry.ElapsedMS, true, nil
 }
 
+// Delete removes the entry for requestPath. If requestPath is a folder, it
+// also removes every entry underneath it (keys prefixed by requestPath +
+// separator), matching the collection Store's recursive folder delete so no
+// stale responses linger for requests that no longer exist on disk.
 func (s *LastResponseStore) Delete(requestPath string) error {
 	entries, err := s.readAll()
 	if err != nil {
 		return err
 	}
-	if _, found := entries[requestPath]; !found {
+	prefix := requestPath + string(filepath.Separator)
+	changed := false
+	for key := range entries {
+		if key == requestPath || strings.HasPrefix(key, prefix) {
+			delete(entries, key)
+			changed = true
+		}
+	}
+	if !changed {
 		return nil
 	}
-	delete(entries, requestPath)
 	return s.writeAll(entries)
 }

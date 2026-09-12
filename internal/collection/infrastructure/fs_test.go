@@ -1,6 +1,7 @@
 package collectionstore
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -266,6 +267,49 @@ func TestStore_SaveRequestRejectsInvalidName(t *testing.T) {
 	}
 }
 
+// TestStore_LoadRequestRejectsPathTraversal guards against a crafted or
+// imported request whose refresh.requestPath points outside the collections
+// root (e.g. ../../../../etc/some.json). filepath.Join cleans ".." but does
+// not contain it, so without the resolve guard LoadRequest would read
+// arbitrary files whose contents could then be substituted and sent.
+func TestStore_LoadRequestRejectsPathTraversal(t *testing.T) {
+	root := t.TempDir()
+	// write a valid request JSON one level above the root to prove the read
+	// would otherwise succeed against an outside file.
+	outside := filepath.Join(root, "..", "outside.json")
+	if err := os.WriteFile(outside, []byte(`{"method":"GET","url":"https://evil.example"}`), 0o644); err != nil {
+		t.Fatalf("setup write error: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Remove(outside) })
+
+	s := New(root)
+	for _, p := range []string{"../outside.json", "../../etc/passwd", "sub/../../outside.json"} {
+		if _, err := s.LoadRequest(p); err == nil {
+			t.Errorf("expected error for traversal path %q, got nil", p)
+		}
+	}
+}
+
+// TestStore_MutatingMethodsRejectPathTraversal covers the write-side joins
+// that share the same unbounded behavior as LoadRequest.
+func TestStore_MutatingMethodsRejectPathTraversal(t *testing.T) {
+	s := New(t.TempDir())
+	req := collection.Request{Method: collection.GET, URL: "https://example.com"}
+
+	if _, err := s.SaveRequest("../escape-dir", "req", req); err == nil {
+		t.Error("SaveRequest: expected error for traversal parent path")
+	}
+	if err := s.UpdateRequest("../escape.json", req); err == nil {
+		t.Error("UpdateRequest: expected error for traversal path")
+	}
+	if err := s.Delete("../escape.json"); err == nil {
+		t.Error("Delete: expected error for traversal path")
+	}
+	if _, err := s.CreateFolder("../escape-dir", "folder"); err == nil {
+		t.Error("CreateFolder: expected error for traversal parent path")
+	}
+}
+
 func TestStore_SaveRequestCreatesRootDirIfMissing(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "does-not-exist-yet")
 	s := New(root)
@@ -294,6 +338,37 @@ func TestStore_TreePopulatesRequestMethod(t *testing.T) {
 	}
 	if got := tree.Children[0].Method; got != collection.DELETE {
 		t.Errorf("Children[0].Method = %q, want %q", got, collection.DELETE)
+	}
+}
+
+// TestStore_TreeReflectsMethodChangeAfterUpdate guards the method cache that
+// Tree() uses to avoid re-reading every request file on each call: a request
+// edited in place (even to a same-length method, so the file size is
+// unchanged) must still show its new method on the next Tree(). If the cache
+// keyed only on size and skipped modtime, this would return the stale method.
+func TestStore_TreeReflectsMethodChangeAfterUpdate(t *testing.T) {
+	s := New(t.TempDir())
+	path, err := s.SaveRequest("", "req", collection.Request{Method: collection.GET, URL: "https://example.com"})
+	if err != nil {
+		t.Fatalf("save error: %v", err)
+	}
+
+	// Warm the cache.
+	if _, err := s.Tree(); err != nil {
+		t.Fatalf("tree error: %v", err)
+	}
+
+	// PUT is the same length as GET, so only a modtime check catches this.
+	if err := s.UpdateRequest(path, collection.Request{Method: collection.PUT, URL: "https://example.com"}); err != nil {
+		t.Fatalf("update error: %v", err)
+	}
+
+	tree, err := s.Tree()
+	if err != nil {
+		t.Fatalf("tree error: %v", err)
+	}
+	if got := tree.Children[0].Method; got != collection.PUT {
+		t.Errorf("Children[0].Method = %q, want %q (stale cache after update)", got, collection.PUT)
 	}
 }
 

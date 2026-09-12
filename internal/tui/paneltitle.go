@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"fmt"
-
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -48,15 +46,4 @@ func rightTextX(width int, title, right string) int {
 		return -1
 	}
 	return rightX
-}
-
-// panelTitleText builds a "[N] Name" panel title, bold and accent-colored
-// when the panel is focused, dim otherwise - same visual language as the
-// numbered [1]/[2]/[3] panel jump keys.
-func panelTitleText(num int, name string, focused bool) string {
-	text := fmt.Sprintf("[%d] %s", num, name)
-	if focused {
-		return lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(activeTheme.FocusedBorder)).Render(text)
-	}
-	return labelStyle.Render(text)
 }

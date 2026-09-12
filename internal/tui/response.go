@@ -210,7 +210,7 @@ func (rv *responseView) refresh() {
 		content = DetectAndRender(rv.rawBody, rv.contentType, true, rv.revealSecrets)
 		content = highlightSearch(content, rv.searchTerm)
 	case viewHeaders:
-		content = formatHeaders(rv.headers)
+		content = formatHeaders(rv.headers, rv.revealSecrets)
 	case viewCookies:
 		content = rv.cookiesText()
 	case viewTests:
@@ -222,13 +222,16 @@ func (rv *responseView) refresh() {
 	rv.vp.SetContent(rv.visualContent(content))
 }
 
-func formatHeaders(headers []collection.Header) string {
+func formatHeaders(headers []collection.Header, reveal bool) string {
 	if len(headers) == 0 {
 		return labelStyle.Render("(no headers)")
 	}
 	var b strings.Builder
 	for _, h := range headers {
-		fmt.Fprintf(&b, "%s: %s\n", h.Key, h.Value)
+		// mask secret-looking header values (Authorization, Set-Cookie,
+		// x-api-key, ...) unless the user toggled reveal - the headers tab
+		// used to print every value verbatim, exposing them on screen-share.
+		fmt.Fprintf(&b, "%s: %s\n", h.Key, maskedValue(h.Key, h.Value, reveal))
 	}
 	return strings.TrimRight(b.String(), "\n")
 }
@@ -279,29 +282,6 @@ func (rv *responseView) scrollToFirstMatch(term string) {
 	}
 }
 
-func highlightSearch(content, term string) string {
-	if term == "" {
-		return content
-	}
-	lower := strings.ToLower(content)
-	lowerTerm := strings.ToLower(term)
-	var b strings.Builder
-	i := 0
-	for {
-		idx := strings.Index(lower[i:], lowerTerm)
-		if idx < 0 {
-			b.WriteString(content[i:])
-			break
-		}
-		start := i + idx
-		end := start + len(term)
-		b.WriteString(content[i:start])
-		b.WriteString(searchHighlightStyle.Render(content[start:end]))
-		i = end
-	}
-	return b.String()
-}
-
 // copiedConfirmationWindow is how long StatusLine keeps showing its
 // "Copied..." confirmation after a copy - it fades back to the normal
 // status line on its own (the app already repaints at least once a second
@@ -327,11 +307,11 @@ func (rv responseView) StatusLine() string {
 		// messages for the same "nothing sent" state.
 		return ""
 	}
-	// "  |  " matches the top bar's own segment separator (see
-	// topBarContent) - a user found the status/timing/size/hint run
-	// together with only double-spacing between them too dense to scan at
-	// a glance, and this is the app's own established way of visually
-	// separating several unrelated pieces of information on one line.
+	// "  |  " is the app's own established segment separator - a user found
+	// the status/timing/size/hint run together with only double-spacing
+	// between them too dense to scan at a glance, and this is the app's own
+	// established way of visually separating several unrelated pieces of
+	// information on one line.
 	statusPart := statusClassStyle(rv.statusCode).Render(rv.status) +
 		labelStyle.Render(fmt.Sprintf("  |  %d ms  |  %s", rv.elapsedMS, humanSize(rv.sizeBytes)))
 	// "y copy"/"Y line" are always worth advertising once there's
@@ -391,12 +371,14 @@ func humanSize(n int) string {
 	if n < 1024 {
 		return fmt.Sprintf("%d bytes", n)
 	}
+	units := [...]string{"KB", "MB", "GB"}
 	div, exp := 1024.0, 0
-	for m := n / 1024; m >= 1024; m /= 1024 {
+	// stop climbing units once we hit the largest one we know about, so exp
+	// can never index past the end of the array for a >=1 TiB byte count.
+	for m := n / 1024; m >= 1024 && exp < len(units)-1; m /= 1024 {
 		div *= 1024
 		exp++
 	}
-	units := [...]string{"KB", "MB", "GB"}
 	return fmt.Sprintf("%.1f %s", float64(n)/div, units[exp])
 }
 
@@ -484,8 +466,12 @@ func (rv responseView) Update(msg tea.Msg) (responseView, tea.Cmd) {
 	var cmd tea.Cmd
 	rv.vp, cmd = rv.vp.Update(msg)
 	// While selecting, moving the cursor (scroll) extends the highlight.
+	// Only the selection overlay moves - the rendered body is identical
+	// across scrolls - so repaint just the overlay instead of re-running
+	// refresh()'s full DetectAndRender/highlight/split over the whole body
+	// on every j/k keystroke (that was per-keystroke lag on large bodies).
 	if rv.visualActive {
-		rv.refresh()
+		rv.refreshVisualOverlay()
 	}
 	return rv, cmd
 }

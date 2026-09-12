@@ -156,6 +156,30 @@ func TestBodyEditor_CtrlBCyclesThroughAllSixTypes(t *testing.T) {
 	}
 }
 
+// TestBodyEditor_SetBodyResetsStaleContentTypeIdx guards a real bug: SetBody
+// used to only assign contentTypeIdx on a match, so loading a raw request
+// whose RawContentType is outside the three known values (e.g. an imported
+// "application/json; charset=utf-8") left the previously loaded request's
+// index in place - Body() then rebuilt the wrong Content-Type from that stale
+// index and sent/saved it.
+func TestBodyEditor_SetBodyResetsStaleContentTypeIdx(t *testing.T) {
+	b := newBodyEditor()
+	// request A: raw xml -> contentTypeIdx lands on application/xml.
+	b.SetBody(collection.Body{Type: collection.BodyRaw, RawContentType: "application/xml", RawText: "<a/>"})
+	if got := b.Body().RawContentType; got != "application/xml" {
+		t.Fatalf("setup: RawContentType = %q, want application/xml", got)
+	}
+
+	// request B: raw body with an unknown content type must not inherit A's.
+	b.SetBody(collection.Body{Type: collection.BodyRaw, RawContentType: "application/json; charset=utf-8", RawText: "{}"})
+	if got := b.Body().RawContentType; got == "application/xml" {
+		t.Errorf("RawContentType = %q, want the stale application/xml index reset", got)
+	}
+	if b.contentTypeIdx != 0 {
+		t.Errorf("contentTypeIdx = %d, want 0 (reset) for an unknown content type", b.contentTypeIdx)
+	}
+}
+
 // TestBodyEditor_URLEncodedBodyRoundTrips guards Body()/SetBody() for the
 // form-urlencoded type - it reuses kvTable (same editor as Params/Headers)
 // rather than a bespoke widget.

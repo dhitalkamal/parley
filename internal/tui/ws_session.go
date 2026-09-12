@@ -86,6 +86,18 @@ type wsSession struct {
 	selected int
 	expanded map[int]bool
 
+	// rendered-block cache for the transcript, parallel to transcript. Rendering
+	// each entry (lipgloss styling + JSON pretty-print) is the costly part of a
+	// refresh, and refreshWSPane runs on every incoming frame, so we cache blocks
+	// and recompute only the ones whose inputs changed instead of re-rendering the
+	// whole backlog each time (that was O(N^2) over a session). See
+	// wsBuildTranscript. cacheSel is the index rendered with the selection marker
+	// (-1 for none); cacheWidth/cacheFocused invalidate the whole cache on change.
+	blockCache   []string
+	cacheWidth   int
+	cacheFocused bool
+	cacheSel     int
+
 	// sent-message history recall (session-only ring). historyIdx == len(history)
 	// means "not currently browsing".
 	history    []string
@@ -126,22 +138,84 @@ func (s *wsSession) appendEvent(dir wsDir, text string, at time.Time) {
 	s.appendFrame(dir, text, false, at)
 }
 
+const (
+	// maxTranscript caps how many transcript lines a session keeps in memory so
+	// a long-lived, chatty connection (e.g. a market-data or log feed) cannot
+	// grow without bound. Oldest lines are evicted first.
+	maxTranscript = 5000
+	// wsTrimChunk is the headroom past maxTranscript we tolerate before evicting,
+	// so trimming (a full re-slice) happens once per chunk rather than on every
+	// arriving frame.
+	wsTrimChunk = 512
+)
+
 // appendFrame adds a line, flagging whether it was a binary frame. When the
 // transcript isn't the focused field, the selection follows the newest line so
 // arriving messages stay in view.
 func (s *wsSession) appendFrame(dir wsDir, text string, binary bool, at time.Time) {
 	s.transcript = append(s.transcript, wsEvent{dir: dir, text: text, binary: binary, at: at})
+	s.trimTranscript()
 	if s.focus != wsFocusTranscript {
 		s.selected = len(s.transcript) - 1
+	}
+}
+
+// trimTranscript evicts the oldest lines once the transcript exceeds its cap
+// (plus a chunk of headroom). selected and the expanded map are keyed by
+// transcript index, so both are shifted down by the number of evicted lines and
+// entries that fall off the front are dropped.
+func (s *wsSession) trimTranscript() {
+	if len(s.transcript) <= maxTranscript+wsTrimChunk {
+		return
+	}
+	over := len(s.transcript) - maxTranscript
+	// fresh slice so the old backing array (and the evicted events it held) is
+	// released rather than retained behind a re-slice.
+	s.transcript = append([]wsEvent(nil), s.transcript[over:]...)
+
+	// blockCache is parallel to transcript (index i renders transcript[i]), so
+	// it must be front-evicted by the same amount or it would keep showing the
+	// old, index-shifted blocks - after a trim the lengths can coincide and the
+	// lazy tail-append in wsSyncBlockCache would never correct it. cacheSel is a
+	// transcript index too; reset it so the previous-selection marker cleanup
+	// does not touch the wrong (shifted) block.
+	if over < len(s.blockCache) {
+		s.blockCache = append([]string(nil), s.blockCache[over:]...)
+	} else {
+		s.blockCache = s.blockCache[:0]
+	}
+	s.cacheSel = -1
+
+	s.selected -= over
+	if s.selected < 0 {
+		s.selected = 0
+	}
+
+	if len(s.expanded) > 0 {
+		shifted := make(map[int]bool, len(s.expanded))
+		for idx, on := range s.expanded {
+			if ni := idx - over; ni >= 0 {
+				shifted[ni] = on
+			}
+		}
+		s.expanded = shifted
 	}
 }
 
 // isLive reports whether a connection is open or being opened.
 func (s wsSession) isLive() bool { return s.connected || s.connecting }
 
-// recordSent pushes a sent message onto the history ring.
+// maxSendHistory caps the session-only send-history ring so composing many
+// messages over a long-lived connection cannot grow without bound.
+const maxSendHistory = 500
+
+// recordSent pushes a sent message onto the history ring, evicting the oldest
+// entries once the ring is full.
 func (s *wsSession) recordSent(msg string) {
 	s.history = append(s.history, msg)
+	if len(s.history) > maxSendHistory {
+		s.history = append([]string(nil), s.history[len(s.history)-maxSendHistory:]...)
+	}
 	s.historyIdx = len(s.history)
 }
 

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	collection "github.com/dhitalkamal/parley/internal/collection/domain"
 	"github.com/dhitalkamal/parley/internal/platform/fsstore"
@@ -14,6 +16,23 @@ import (
 // Store implements collection.Store against a directory tree rooted at Root.
 type Store struct {
 	Root string
+
+	// methodCache remembers the decoded method per request file so that
+	// Tree() - called on every autosave and structural change via
+	// refreshTree - does not re-read and re-parse unchanged files on disk.
+	// Keyed by absolute file path; an entry is only trusted when the file's
+	// current modtime and size still match the ones recorded when it was read.
+	mu          sync.Mutex
+	methodCache map[string]methodCacheEntry
+}
+
+// methodCacheEntry is a cached request method plus the file identity it was
+// read from. A mismatch on modTime or size means the file changed and the
+// method must be re-read.
+type methodCacheEntry struct {
+	method  collection.Method
+	modTime time.Time
+	size    int64
 }
 
 var _ collection.Store = (*Store)(nil)
@@ -29,6 +48,11 @@ type siblingEntry struct {
 	name   string
 	order  int
 	isDir  bool
+	// modTime and size identify a request file for the method cache; zero
+	// for folders and for files whose Info() could not be stat'd (which
+	// simply forces a cache miss and a fresh read).
+	modTime time.Time
+	size    int64
 }
 
 func (s *Store) listSiblings(parentAbs string) ([]siblingEntry, error) {
@@ -49,7 +73,13 @@ func (s *Store) listSiblings(parentAbs string) ([]siblingEntry, error) {
 			out = append(out, siblingEntry{fsName: e.Name(), name: name, order: order, isDir: true})
 		} else if strings.HasSuffix(e.Name(), ".json") {
 			name, order := DecodeName(e.Name(), true)
-			out = append(out, siblingEntry{fsName: e.Name(), name: name, order: order, isDir: false})
+			var modTime time.Time
+			var size int64
+			if info, err := e.Info(); err == nil {
+				modTime = info.ModTime()
+				size = info.Size()
+			}
+			out = append(out, siblingEntry{fsName: e.Name(), name: name, order: order, isDir: false, modTime: modTime, size: size})
 		}
 	}
 	// Folders group before requests regardless of manual order or creation
@@ -68,6 +98,22 @@ func (s *Store) listSiblings(parentAbs string) ([]siblingEntry, error) {
 		return out[i].name < out[j].name
 	})
 	return out, nil
+}
+
+// resolve joins the caller-supplied relative path onto Root and confirms the
+// cleaned result stays inside Root. filepath.Join cleans ".." segments but
+// does not contain them, so a path like "../../etc/x.json" would otherwise
+// read or write outside the collections root. Some paths originate from
+// imported or shared request files (e.g. refresh.requestPath deserialized
+// verbatim), so this guard is what stops a crafted collection from reaching
+// arbitrary files on disk.
+func (s *Store) resolve(path string) (string, error) {
+	abs := filepath.Join(s.Root, path)
+	rel, err := filepath.Rel(s.Root, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("store: path escapes collections root: %s", path)
+	}
+	return abs, nil
 }
 
 // dirOf is filepath.Dir but returns "" instead of "." for a top-level path,
@@ -105,16 +151,13 @@ func (s *Store) buildNode(absDir, relPath string) (collection.TreeNode, error) {
 			child.Name = sib.name
 			node.Children = append(node.Children, child)
 		} else {
-			// Reading the file here (rather than just the directory entry)
-			// costs one small file read per request, but it's what lets the
-			// sidebar show a method badge without loading every request by
-			// hand first.
-			method := collection.Method("")
-			if data, err := os.ReadFile(filepath.Join(absDir, sib.fsName)); err == nil {
-				if req, err := decodeRequest(data); err == nil {
-					method = req.Method
-				}
-			}
+			// The sidebar shows a method badge per request without opening it,
+			// which needs the method from inside each file. Reading and parsing
+			// every file on every Tree() call is costly because refreshTree
+			// calls Tree() on each autosave and structural change; so cache the
+			// method keyed by modtime+size and only re-read files that changed.
+			abs := filepath.Join(absDir, sib.fsName)
+			method := s.cachedMethod(abs, sib.modTime, sib.size)
 			node.Children = append(node.Children, collection.TreeNode{
 				Kind:   collection.KindRequest,
 				Name:   sib.name,
@@ -126,8 +169,48 @@ func (s *Store) buildNode(absDir, relPath string) (collection.TreeNode, error) {
 	return node, nil
 }
 
+// cachedMethod returns the method for the request file at abs, reading and
+// decoding it only when there is no cache entry matching the given modtime and
+// size. A zero modTime (Info() failed at listing time) always misses the
+// cache, falling back to a fresh read. A decode failure yields an empty method
+// and is not cached, so a transiently-bad file is retried next time.
+func (s *Store) cachedMethod(abs string, modTime time.Time, size int64) collection.Method {
+	s.mu.Lock()
+	if entry, ok := s.methodCache[abs]; ok && !modTime.IsZero() && entry.modTime.Equal(modTime) && entry.size == size {
+		s.mu.Unlock()
+		return entry.method
+	}
+	s.mu.Unlock()
+
+	method := collection.Method("")
+	data, err := os.ReadFile(abs)
+	if err != nil {
+		return method
+	}
+	req, err := decodeRequest(data)
+	if err != nil {
+		return method
+	}
+	method = req.Method
+
+	// Only cache when we have a valid file identity to validate against later.
+	if !modTime.IsZero() {
+		s.mu.Lock()
+		if s.methodCache == nil {
+			s.methodCache = make(map[string]methodCacheEntry)
+		}
+		s.methodCache[abs] = methodCacheEntry{method: method, modTime: modTime, size: size}
+		s.mu.Unlock()
+	}
+	return method
+}
+
 func (s *Store) LoadRequest(path string) (collection.Request, error) {
-	data, err := os.ReadFile(filepath.Join(s.Root, path))
+	abs, err := s.resolve(path)
+	if err != nil {
+		return collection.Request{}, err
+	}
+	data, err := os.ReadFile(abs)
 	if err != nil {
 		return collection.Request{}, err
 	}
@@ -138,7 +221,10 @@ func (s *Store) SaveRequest(parentPath, name string, req collection.Request) (st
 	if err := fsstore.ValidateName(name); err != nil {
 		return "", err
 	}
-	parentAbs := filepath.Join(s.Root, parentPath)
+	parentAbs, err := s.resolve(parentPath)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(parentAbs, 0o755); err != nil {
 		return "", err
 	}
@@ -162,18 +248,25 @@ func (s *Store) SaveRequest(parentPath, name string, req collection.Request) (st
 }
 
 func (s *Store) UpdateRequest(path string, req collection.Request) error {
+	abs, err := s.resolve(path)
+	if err != nil {
+		return err
+	}
 	data, err := encodeRequest(req)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.Root, path), data, 0o644)
+	return os.WriteFile(abs, data, 0o644)
 }
 
 func (s *Store) CreateFolder(parentPath, name string) (string, error) {
 	if err := fsstore.ValidateName(name); err != nil {
 		return "", err
 	}
-	parentAbs := filepath.Join(s.Root, parentPath)
+	parentAbs, err := s.resolve(parentPath)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(parentAbs, 0o755); err != nil {
 		return "", err
 	}
@@ -206,14 +299,26 @@ func (s *Store) Rename(path, newName string) (string, error) {
 	}
 	parentPath := dirOf(path)
 	newPath := filepath.Join(parentPath, newBase)
-	if err := os.Rename(filepath.Join(s.Root, path), filepath.Join(s.Root, newPath)); err != nil {
+	oldAbs, err := s.resolve(path)
+	if err != nil {
+		return "", err
+	}
+	newAbs, err := s.resolve(newPath)
+	if err != nil {
+		return "", err
+	}
+	if err := os.Rename(oldAbs, newAbs); err != nil {
 		return "", err
 	}
 	return newPath, nil
 }
 
 func (s *Store) Delete(path string) error {
-	return os.RemoveAll(filepath.Join(s.Root, path))
+	abs, err := s.resolve(path)
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(abs)
 }
 
 func (s *Store) MoveUp(path string) error {
@@ -229,7 +334,10 @@ func (s *Store) MoveDown(path string) error {
 // next), renaming both on disk. A no-op at either end of the sibling list.
 func (s *Store) swapWithSibling(path string, offset int) error {
 	parentPath := dirOf(path)
-	parentAbs := filepath.Join(s.Root, parentPath)
+	parentAbs, err := s.resolve(parentPath)
+	if err != nil {
+		return err
+	}
 	siblings, err := s.listSiblings(parentAbs)
 	if err != nil {
 		return err

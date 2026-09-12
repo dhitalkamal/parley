@@ -139,7 +139,7 @@ func (m Model) handleRunResult(msg runResultMsg) Model {
 	// Keep the Dashboard's own in-memory run list in sync immediately - a
 	// rerun triggered from there (see startRerunFromHistory) shouldn't
 	// require leaving and reopening the screen to see itself in the log.
-	m.dashboard.runs = append([]history.CollectionRunEntry{entry}, m.dashboard.runs...)
+	m.dashboard.setRuns(append([]history.CollectionRunEntry{entry}, m.dashboard.runs...))
 	m.applyScriptContext(msg.ctx)
 	m.status = "Run complete"
 	return m

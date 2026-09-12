@@ -46,11 +46,9 @@ func zoneChevron(expanded bool) string {
 }
 
 // zoneHeaderText renders a zone's header: chevron + title, accent-colored
-// and bold when focused, dim otherwise - the same visual language
-// panelTitleText used for the old numbered panel titles, minus the [N]
-// prefix (there's no numbered panel-jump scheme to reference once
-// Collections moved out of the permanent grid into a drawer - see
-// drawer.go).
+// and bold when focused, dim otherwise. No [N] number prefix - there's no
+// numbered panel-jump scheme to reference once Collections moved out of the
+// permanent grid into a drawer (see drawer.go).
 func zoneHeaderText(title string, expanded, focused bool) string {
 	text := zoneChevron(expanded) + " " + title
 	if focused {

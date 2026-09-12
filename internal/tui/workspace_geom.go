@@ -69,9 +69,9 @@ func (m Model) computeWorkspaceGeom(width, height int) workspaceGeom {
 
 // currentWorkspaceGeom is computeWorkspaceGeom for the workspace's actual
 // current width and screen x-origin, accounting for the collections drawer
-// (see drawer_view.go's workspaceXOffset) occupying real columns on the
-// left while open. Every click/hit-test/anchor computation that needs to
-// know where the request/response zones really are calls this instead of
+// (see layoutColumns) occupying real columns on the left while open. Every
+// click/hit-test/anchor computation that needs to know where the
+// request/response zones really are calls this instead of
 // computeWorkspaceGeom(m.width, ...) directly, so a stale full-width
 // assumption can't creep back into one call site while the rest account
 // for the drawer.

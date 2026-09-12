@@ -18,7 +18,7 @@ import (
 func TestDrawerOpen_ResizesWorkspaceInsteadOfHidingIt(t *testing.T) {
 	m := New(t.TempDir(), t.TempDir())
 	m.width, m.height = 140, 44
-	m.openDrawer()
+	m.drawerVisible = true
 
 	lines := strings.Split(stripANSI(m.mainView()), "\n")
 	// Only the workspace region's own rows are asserted on here - the url
@@ -31,7 +31,7 @@ func TestDrawerOpen_ResizesWorkspaceInsteadOfHidingIt(t *testing.T) {
 		}
 	}
 
-	drawerRight := m.drawerWidth() + 1 // +1 for the gap column
+	drawerRight := m.leftSidebarWidth() + 1 // +1 for the gap column
 	found := false
 	for row := drawerTop(); row < drawerTop()+m.height && row < len(lines); row++ {
 		col := strings.Index(lines[row], "Request")

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -261,6 +262,19 @@ func (c confirmState) View() string {
 	return modalStyle.Width(modalWidth).Align(lipgloss.Center).Render(content)
 }
 
+// pathIsAtOrUnder reports whether p is ancestor itself or a descendant of it.
+// Store paths use filepath separators, so a descendant is prefixed by
+// ancestor + separator. An empty p (nothing loaded) is never under anything.
+func pathIsAtOrUnder(p, ancestor string) bool {
+	if p == "" {
+		return false
+	}
+	if p == ancestor {
+		return true
+	}
+	return strings.HasPrefix(p, ancestor+string(filepath.Separator))
+}
+
 func (m Model) handleConfirmKey(k tea.KeyMsg) (Model, tea.Cmd) {
 	switch k.String() {
 	case "y":
@@ -281,10 +295,17 @@ func (m Model) handleConfirmKey(k tea.KeyMsg) (Model, tea.Cmd) {
 			m.status = "Delete failed: " + err.Error()
 			return m, nil
 		}
-		if m.loadedRequestPath == target {
+		// target may be a folder; store.Delete removes it and all children
+		// recursively, so clear any loaded request and cached response that
+		// lives at target or underneath it, not just an exact match.
+		if pathIsAtOrUnder(m.loadedRequestPath, target) {
 			m.loadedRequestPath = ""
 		}
-		delete(m.responseCache, target)
+		for cached := range m.responseCache {
+			if pathIsAtOrUnder(cached, target) {
+				delete(m.responseCache, cached)
+			}
+		}
 		_ = m.lastResponseStore.Delete(target)
 		m.refreshTree()
 		m.status = "Deleted"

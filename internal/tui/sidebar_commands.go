@@ -364,8 +364,14 @@ func (m Model) autosaveAfter(next tea.Model, cmd tea.Cmd) (tea.Model, tea.Cmd) {
 		nm.status = "Autosave failed: " + err.Error()
 		return nm, cmd
 	}
-	// Same reason saveCurrentRequest refreshes: the tree caches each
-	// request's method for the sidebar's badge.
-	nm.refreshTree()
+	// The tree caches each request's method for the sidebar's badge, and that
+	// is the only request field it holds - so only a method change needs a
+	// refresh. Skipping it otherwise keeps the hot editing path (typing into
+	// URL/body/params) off store.Tree, which re-reads every request file in the
+	// whole collection to recompute badges - O(files) blocking disk reads per
+	// keystroke, and painfully visible input lag on a large collection.
+	if before.Method != after.Method {
+		nm.refreshTree()
+	}
 	return nm, cmd
 }

@@ -45,6 +45,19 @@ type dashboardState struct {
 	// filter narrows the run log to entries whose label contains it
 	// (case-insensitive) - see filteredRuns. Empty means "show everything".
 	filter string
+	// overview is the cached aggregate (total/passed/failed/rate/avg) over all
+	// runs. It is recomputed only when runs change (via setRuns), not on every
+	// 1s render frame - the dashboard repaints on the clock tick and a full
+	// re-scan of the whole history each second was pure waste.
+	overview dashboardOverview
+}
+
+// setRuns replaces the run list and refreshes the cached overview. Every site
+// that changes runs must go through here so the cached aggregate cannot drift
+// from the underlying data.
+func (d *dashboardState) setRuns(runs []history.CollectionRunEntry) {
+	d.runs = runs
+	d.overview = computeDashboardOverview(runs)
 }
 
 // filteredRuns is every run matching d.filter (all of them if it's empty),
@@ -104,7 +117,8 @@ func (m Model) openDashboard() (Model, tea.Cmd) {
 		m.previousScreen = m.screen
 	}
 	m.screen = ScreenDashboard
-	m.dashboard = dashboardState{runs: runs}
+	m.dashboard = dashboardState{}
+	m.dashboard.setRuns(runs)
 	return m, nil
 }
 
@@ -166,7 +180,7 @@ func (m Model) deleteSelectedDashboardRun() (Model, tea.Cmd) {
 		m.status = "Delete failed: " + err.Error()
 		return m, nil
 	}
-	m.dashboard.runs = runs
+	m.dashboard.setRuns(runs)
 	if shown := m.dashboard.shownRuns(); m.dashboard.cursor >= len(shown) && m.dashboard.cursor > 0 {
 		m.dashboard.cursor--
 	}

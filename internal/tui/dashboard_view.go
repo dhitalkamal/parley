@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	execution "github.com/dhitalkamal/parley/internal/execution/domain"
-	history "github.com/dhitalkamal/parley/internal/history/domain"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -34,16 +33,24 @@ func (m Model) dashboardScreenView() string {
 
 	if len(m.dashboard.runs) == 0 {
 		content := borderStyle.Render(dashboardHeader() + "\n" + labelStyle.Render("No runs recorded yet"))
-		return padLinesTo(strings.Join([]string{content, status}, "\n"), m.height)
+		return m.screenFrame(content, status)
 	}
 
-	contentHeight := m.height - topBarHeight - tabStripHeight - helpBarHeight
-	if contentHeight < 3 {
-		contentHeight = 3
+	contentHeight := m.screenContentHeight()
+
+	// derive the filtered/shown run rows once per frame and thread them
+	// through the section renderers below - the dashboard repaints on every
+	// 1s clock tick, and filteredRuns allocates a full row slice and
+	// lowercases every label, so letting each section call it independently
+	// meant scanning the whole history several times a second for nothing.
+	filtered := m.dashboard.filteredRuns()
+	shown := filtered
+	if len(shown) > maxDashboardRunsShown {
+		shown = shown[:maxDashboardRunsShown]
 	}
 
 	if m.width < minWidthForDashboardSplit {
-		return m.dashboardNarrowView(status, contentHeight)
+		return m.dashboardNarrowView(status, contentHeight, shown, len(filtered))
 	}
 
 	// fixedTop: title(1) + divider(1) + blank(1) + overview(dashboardOverviewFixedHeight) + blank(1).
@@ -70,21 +77,21 @@ func (m Model) dashboardScreenView() string {
 		strings.Repeat("-", m.width),
 		"",
 	}
-	lines = append(lines, dashboardOverviewLines(m.dashboard.runs)...)
+	lines = append(lines, dashboardOverviewLines(m.dashboard.overview)...)
 	lines = append(lines, "")
-	body := strings.Join(lines, "\n") + "\n" + m.dashboardSplitView(m.width, splitHeight)
+	body := strings.Join(lines, "\n") + "\n" + m.dashboardSplitView(m.width, splitHeight, shown, len(filtered))
 	if perfHeight > 0 {
 		body += "\n\n" + clipToLines(m.dashboardPerformanceSection(m.width, perfHeight-1), perfHeight)
 	}
 
-	return padLinesTo(strings.Join([]string{body, status}, "\n"), m.height)
+	return m.screenFrame(body, status)
 }
 
 // dashboardNarrowView is the fallback below minWidthForDashboardSplit: one
 // bordered column stacking the title, Overview, Run History, and Request
 // Performance - no Selected Run pane, matching the graceful-degradation
 // floor pattern every other side-by-side layout in this app uses.
-func (m Model) dashboardNarrowView(status string, contentHeight int) string {
+func (m Model) dashboardNarrowView(status string, contentHeight int, shown []dashboardRunRow, filteredLen int) string {
 	innerWidth := m.width - 4
 	innerHeight := contentHeight - 2
 
@@ -93,21 +100,20 @@ func (m Model) dashboardNarrowView(status string, contentHeight int) string {
 		strings.Repeat("-", innerWidth),
 		"",
 	}
-	lines = append(lines, dashboardOverviewLines(m.dashboard.runs)...)
+	lines = append(lines, dashboardOverviewLines(m.dashboard.overview)...)
 	lines = append(lines, "", labelStyle.Render("RUN HISTORY"), "")
-	lines = append(lines, strings.Split(m.dashboardRunHistoryContent(innerWidth, maxDashboardRunsShown), "\n")...)
+	lines = append(lines, strings.Split(m.dashboardRunHistoryContent(innerWidth, maxDashboardRunsShown, shown, filteredLen), "\n")...)
 	lines = append(lines, "", m.dashboardPerformanceSection(innerWidth, 8))
 
 	content := clipToLines(strings.Join(lines, "\n"), innerHeight)
 	box := borderStyle.Width(m.width - 2).Height(innerHeight).Render(content)
-	return padLinesTo(strings.Join([]string{box, status}, "\n"), m.height)
+	return m.screenFrame(box, status)
 }
 
 // dashboardOverviewLines is always exactly dashboardOverviewFixedHeight
 // lines: the section label, a blank, and a header+value row pair of the
 // five aggregate stats - see computeDashboardOverview.
-func dashboardOverviewLines(runs []history.CollectionRunEntry) []string {
-	ov := computeDashboardOverview(runs)
+func dashboardOverviewLines(ov dashboardOverview) []string {
 	header := fmt.Sprintf("%-*s%-*s%-*s%-*s%-*s",
 		dashboardStatColWidth, "Runs", dashboardStatColWidth, "Passed", dashboardStatColWidth, "Failed",
 		dashboardStatColWidth, "Pass Rate", dashboardStatColWidth, "Avg Duration")
@@ -126,7 +132,7 @@ func dashboardOverviewLines(runs []history.CollectionRunEntry) []string {
 // exactly height rows - both built via the same border(2)+content(height-2)
 // shape every other bordered zone in this app uses, so lipgloss.JoinHorizontal
 // never has to pad one side taller than the other.
-func (m Model) dashboardSplitView(width, height int) string {
+func (m Model) dashboardSplitView(width, height int, shown []dashboardRunRow, filteredLen int) string {
 	leftWidth := width / 2
 	rightWidth := width - leftWidth - 1
 	leftContentWidth := leftWidth - 4
@@ -135,11 +141,11 @@ func (m Model) dashboardSplitView(width, height int) string {
 		innerHeight = 1
 	}
 
-	leftContent := clipToLines(m.dashboardRunHistoryContent(leftContentWidth, innerHeight), innerHeight)
+	leftContent := clipToLines(m.dashboardRunHistoryContent(leftContentWidth, innerHeight, shown, filteredLen), innerHeight)
 	leftBody := borderStyle.Width(leftWidth - 2).Height(innerHeight).Render(leftContent)
 	leftBox := titledBox(leftBody, zoneHeaderText("Run History", true, true))
 
-	rightBox := m.dashboardSelectedRunPane(rightWidth, height)
+	rightBox := m.dashboardSelectedRunPane(rightWidth, height, shown)
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftBox, " ", rightBox)
 }
 
@@ -154,10 +160,9 @@ func (m Model) dashboardSplitView(width, height int) string {
 // is explicit, not this ordinary scrolling. Every line is clipped (not left
 // to wrap) to width, the same class of bug response.go's StatusLine guards
 // against.
-func (m Model) dashboardRunHistoryContent(width, maxRows int) string {
-	all := m.dashboard.filteredRuns()
-	rows := m.dashboard.shownRuns()
-	truncatedByCap := len(all) - len(rows)
+func (m Model) dashboardRunHistoryContent(width, maxRows int, shown []dashboardRunRow, filteredLen int) string {
+	rows := shown
+	truncatedByCap := filteredLen - len(rows)
 
 	capacity := maxRows
 	if truncatedByCap > 0 && capacity > 1 {
@@ -209,13 +214,14 @@ func dashboardRunLine(row dashboardRunRow, selected bool) string {
 // dashboardSelectedRunPane is the right column: every request in whichever
 // run the cursor currently sits on, live - moving the cursor in the left
 // column updates this pane immediately, no separate drill-down step.
-func (m Model) dashboardSelectedRunPane(width, height int) string {
+func (m Model) dashboardSelectedRunPane(width, height int, shown []dashboardRunRow) string {
 	innerHeight := height - 2
 	if innerHeight < 1 {
 		innerHeight = 1
 	}
 	body := labelStyle.Render("Select a run to see its details")
-	if row, ok := m.dashboard.selectedRun(); ok {
+	if cursor := m.dashboard.cursor; cursor >= 0 && cursor < len(shown) {
+		row := shown[cursor]
 		// dashboardRunHeaderLines: label(1)+blank(1)+4 stat rows+blank(1)+
 		// "REQUESTS"(1)+blank(1) - everything dashboardSelectedRunContent
 		// renders before its per-request rows.

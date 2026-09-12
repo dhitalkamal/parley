@@ -41,10 +41,3 @@ func TestTitledBox_PreservesOverallWidth(t *testing.T) {
 		}
 	}
 }
-
-func TestPanelTitleText_ContainsNumberAndName(t *testing.T) {
-	got := stripANSI(panelTitleText(1, "Collections", false))
-	if !strings.Contains(got, "1") || !strings.Contains(got, "Collections") {
-		t.Errorf("got %q, want it to contain both the number and the name", got)
-	}
-}

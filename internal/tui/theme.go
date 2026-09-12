@@ -133,7 +133,6 @@ var (
 	disabledRowStyle   lipgloss.Style
 	warnStyle          lipgloss.Style
 	modalStyle         lipgloss.Style
-	topBarStyle        lipgloss.Style
 	tabBarStyle        lipgloss.Style
 	activeTabStyle     lipgloss.Style
 	activeTabPillStyle lipgloss.Style // filled active-tab pill (DevTools tab bar)
@@ -175,7 +174,6 @@ func applyTheme(t Theme) {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(t.Border)).
 		Padding(1, 3)
-	topBarStyle = lipgloss.NewStyle().Background(lipgloss.Color(t.PanelAlt)).Foreground(lipgloss.Color(t.FgDim)).Padding(0, 1)
 	tabBarStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(t.FgDim))
 	activeTabStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(t.Accent))
 	activeTabPillStyle = lipgloss.NewStyle().Bold(true).Background(lipgloss.Color(t.Accent)).Foreground(lipgloss.Color(t.AccentFg))

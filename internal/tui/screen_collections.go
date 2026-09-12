@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -50,10 +48,7 @@ func (m Model) openCollectionsScreen() (Model, tea.Cmd) {
 // behind it (see drawer_view.go), this is the screen itself, full width and
 // full height.
 func (m Model) collectionsScreenView() string {
-	contentHeight := m.height - topBarHeight - tabStripHeight - helpBarHeight
-	if contentHeight < 3 {
-		contentHeight = 3
-	}
+	contentHeight := m.screenContentHeight()
 	m.help.Width = m.width - 2
 	status := labelStyle.Render(collectionsStatusBar)
 
@@ -61,7 +56,7 @@ func (m Model) collectionsScreenView() string {
 		m.sidebar.SetFocused(true)
 		m.sidebar.SetSize(m.width-2, contentHeight-2)
 		body := padLinesTo(titledBox(m.sidebar.View(), zoneHeaderText("Collections", true, true)), contentHeight)
-		return padLinesTo(strings.Join([]string{body, status}, "\n"), m.height)
+		return m.screenFrame(body, status)
 	}
 
 	sidebarWidth := collectionsSidebarWidth(m.width)
@@ -73,7 +68,7 @@ func (m Model) collectionsScreenView() string {
 	aboutBox := m.aboutPanelView(aboutWidth, contentHeight)
 
 	body := padLinesTo(lipgloss.JoinHorizontal(lipgloss.Top, sidebarBox, " ", aboutBox), contentHeight)
-	return padLinesTo(strings.Join([]string{body, status}, "\n"), m.height)
+	return m.screenFrame(body, status)
 }
 
 // handleCollectionsScreenKey handles every key while the Collections screen

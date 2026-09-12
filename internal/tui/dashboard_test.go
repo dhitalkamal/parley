@@ -296,3 +296,30 @@ func TestDashboardScreenView_RendersExactlyTheTerminalHeight(t *testing.T) {
 		t.Errorf("got %d lines, want %d", len(lines), m.height)
 	}
 }
+
+// TestDashboard_OverviewCachedOnSetRuns guards that the overview aggregate is
+// computed when the run list changes, not re-scanned over the whole history on
+// every 1s render frame. setRuns must keep dashboardState.overview in sync.
+func TestDashboard_OverviewCachedOnSetRuns(t *testing.T) {
+	runs := []history.CollectionRunEntry{
+		{Path: "a", TotalMS: 100, Results: []execution.RunResult{{}}},
+		{Path: "b", TotalMS: 300, Results: nil},
+	}
+	var d dashboardState
+	d.setRuns(runs)
+	if got, want := d.overview, computeDashboardOverview(runs); got != want {
+		t.Fatalf("after setRuns overview = %+v, want %+v", got, want)
+	}
+	if d.overview.total != 2 {
+		t.Errorf("overview.total = %d, want 2", d.overview.total)
+	}
+	// prepending a run must refresh the cached overview.
+	grown := append([]history.CollectionRunEntry{{Path: "c", TotalMS: 50, Results: nil}}, d.runs...)
+	d.setRuns(grown)
+	if got, want := d.overview, computeDashboardOverview(grown); got != want {
+		t.Fatalf("after growth overview = %+v, want %+v", got, want)
+	}
+	if d.overview.total != 3 {
+		t.Errorf("overview.total = %d, want 3", d.overview.total)
+	}
+}

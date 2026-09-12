@@ -87,8 +87,7 @@ func TestSidebar_SelectingADifferentItemResetsScroll(t *testing.T) {
 		t.Fatalf("save error: %v", err)
 	}
 	m.refreshTree()
-	// The drawer is already open by default (see New()); focus it directly
-	// rather than via openDrawer(), which no-ops when it's already visible.
+	// The drawer is already open by default (see New()); focus it directly.
 	m.focus = focusSidebar
 	m.updateFocus()
 

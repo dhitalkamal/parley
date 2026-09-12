@@ -95,11 +95,20 @@ func (b bodyEditor) Body() collection.Body {
 }
 
 func (b *bodyEditor) SetBody(body collection.Body) {
+	// default to None so a Body whose Type matches nothing in bodyTypes
+	// (e.g. the empty-typed collection.Body{} used to clear the editor)
+	// falls back to None instead of keeping the previous request's index.
+	b.typeIdx = 0
 	for i, t := range bodyTypes {
 		if t == body.Type {
 			b.typeIdx = i
 		}
 	}
+	// reset before matching so an unknown RawContentType (e.g. one imported
+	// from curl/OpenAPI like "application/json; charset=utf-8") falls back to
+	// the first known type instead of keeping the previously loaded request's
+	// stale index, which would send/save the wrong Content-Type.
+	b.contentTypeIdx = 0
 	for i, ct := range rawContentTypes {
 		if ct == body.RawContentType {
 			b.contentTypeIdx = i
