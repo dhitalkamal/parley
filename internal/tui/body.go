@@ -100,6 +100,11 @@ func (b *bodyEditor) SetBody(body collection.Body) {
 			b.typeIdx = i
 		}
 	}
+	// reset before matching so an unknown RawContentType (e.g. one imported
+	// from curl/OpenAPI like "application/json; charset=utf-8") falls back to
+	// the first known type instead of keeping the previously loaded request's
+	// stale index, which would send/save the wrong Content-Type.
+	b.contentTypeIdx = 0
 	for i, ct := range rawContentTypes {
 		if ct == body.RawContentType {
 			b.contentTypeIdx = i
