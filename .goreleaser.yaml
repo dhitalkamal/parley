@@ -1,0 +1,64 @@
+# goreleaser config for parley. reconstructed to reproduce the existing
+# release artifacts (parley_<os>_<arch>.tar.gz, checksums.txt, and the
+# homebrew formula in the dhitalkamal/homebrew-tap repo) and, the point of
+# this file, to stamp each binary with the release tag via -X main.version so
+# `parley version` reports the real version instead of "dev".
+#
+# targets the goreleaser v2 schema. run `goreleaser check` before the next
+# release to validate against your installed goreleaser version. if it is
+# older than v2.4, replace the archives `formats: [tar.gz]` list with the
+# singular `format: tar.gz`.
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: parley
+    main: ./cmd/parley
+    binary: parley
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    # -X main.version wires the release tag into cmd/parley/main.go's version
+    # var; -s -w strip debug info to keep the binary small.
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: parley
+    # match the existing asset names exactly (no version segment) so install.sh
+    # and the homebrew formula keep resolving the same URLs.
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    # the existing tarballs contain only the binary; none* is the goreleaser
+    # idiom for "no extra files, binary only".
+    files:
+      - none*
+
+checksum:
+  name_template: "checksums.txt"
+
+brews:
+  - name: parley
+    repository:
+      owner: dhitalkamal
+      name: homebrew-tap
+    homepage: "https://github.com/dhitalkamal/parley"
+    description: "Terminal API client: collections, environments, auth, scripting, WebSocket testing"
+    install: |
+      bin.install "parley"
+    test: |
+      assert_predicate bin/"parley", :executable?
+
+release:
+  github:
+    owner: dhitalkamal
+    name: parley
