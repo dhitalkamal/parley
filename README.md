@@ -117,4 +117,7 @@ under `$PARLEY_HOME`, else `$XDG_CONFIG_HOME/parley`, else
     parley run <path>
 
 runs a saved request or folder from the active workspace headlessly - see
-above.
+above. Omit `<path>` to run the whole collection.
+
+    parley version    print the version
+    parley help       show the top-level command summary
