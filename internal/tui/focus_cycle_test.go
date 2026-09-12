@@ -20,7 +20,7 @@ func TestNextFocus_CyclesInVisualLeftToRightThenTopToBottomOrder(t *testing.T) {
 	m := New(t.TempDir(), t.TempDir())
 	m.width, m.height = 140, 44
 	m.screen = ScreenRequest
-	m.closeDrawer()
+	m.drawerVisible = false
 	m.focus = focusURL
 
 	want := []int{focusSend, focusRequest, focusResponse, focusRail, focusMethod, focusURL}
@@ -44,7 +44,7 @@ func TestNextFocus_NeverLandsOnTheCollectionsDrawer(t *testing.T) {
 	m := New(t.TempDir(), t.TempDir())
 	m.width, m.height = 140, 44
 	m.screen = ScreenRequest
-	m.closeDrawer()
+	m.drawerVisible = false
 	m.focus = focusURL
 
 	for i := 0; i < focusTabCount; i++ {
@@ -71,8 +71,7 @@ func TestNextFocus_WhileDrawerOpenDoesNotCloseIt(t *testing.T) {
 	m := New(t.TempDir(), t.TempDir())
 	m.width, m.height = 140, 44
 	m.screen = ScreenRequest
-	// The drawer is already open by default (see New()); focus it directly
-	// rather than via openDrawer(), which no-ops when it's already visible.
+	// The drawer is already open by default (see New()); focus it directly.
 	m.focus = focusSidebar
 	m.updateFocus()
 

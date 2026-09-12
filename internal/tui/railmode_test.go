@@ -106,7 +106,7 @@ func TestRail_VSwitchesViewWhileFocused(t *testing.T) {
 func TestRail_FocusStopOnlyWhenVisible(t *testing.T) {
 	m := New(t.TempDir(), t.TempDir())
 	m.screen = ScreenRequest
-	m.closeDrawer()
+	m.drawerVisible = false
 
 	m.width = minWidthForSidebar - 1
 	if railStopsContain(m.tabStops(), focusRail) {

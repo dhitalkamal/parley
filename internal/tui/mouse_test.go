@@ -38,7 +38,7 @@ func TestHitTestZone_MethodURLSend(t *testing.T) {
 func TestHitTestZone_RequestFillsWorkspaceBeforeAnyResponse(t *testing.T) {
 	m := New(t.TempDir(), t.TempDir())
 	m.width, m.height = 140, 44
-	m.closeDrawer()
+	m.drawerVisible = false
 	_, centerStart, centerW := m.layoutColumns()
 	y := gridTop() + 1
 
@@ -55,7 +55,7 @@ func TestHitTestZone_RequestFillsWorkspaceBeforeAnyResponse(t *testing.T) {
 func TestHitTestZone_RequestOverResponseOnceAResponseExists(t *testing.T) {
 	m := New(t.TempDir(), t.TempDir())
 	m.width, m.height = 140, 44
-	m.closeDrawer()
+	m.drawerVisible = false
 	m.response.SetResponse(execution.Response{StatusCode: 200, Status: "200 OK"}, 10)
 
 	// The request/response zones live in the center column now, offset right by
@@ -85,7 +85,7 @@ func TestHitTestZone_BelowGridIsNone(t *testing.T) {
 }
 
 // TestHitTestZone_DrawerOpenSplitsSidebarAndWorkspace guards the resize
-// layout (see workspaceXOffset): while the drawer is open, a click's
+// layout (see layoutColumns): while the drawer is open, a click's
 // column decides between the drawer (zoneSidebar), the 1-column gap
 // (zoneNone), and the workspace shifted right by the drawer's own width -
 // not, as an earlier overlay version had it, every click routing to the
@@ -93,22 +93,22 @@ func TestHitTestZone_BelowGridIsNone(t *testing.T) {
 func TestHitTestZone_DrawerOpenSplitsSidebarAndWorkspace(t *testing.T) {
 	m := New(t.TempDir(), t.TempDir())
 	m.width, m.height = 140, 44
-	m.openDrawer()
+	m.drawerVisible = true
 	_, centerStart, centerW := m.layoutColumns()
 	y := gridTop() + 1
-	drawerW := m.drawerWidth()
+	drawerW := m.leftSidebarWidth()
 
 	if got := m.hitTestZone(0, y); got != zoneSidebar {
 		t.Errorf("x=0: got %v, want zoneSidebar", got)
 	}
 	if got := m.hitTestZone(drawerW-1, y); got != zoneSidebar {
-		t.Errorf("x=drawerWidth-1: got %v, want zoneSidebar", got)
+		t.Errorf("x=drawerW-1: got %v, want zoneSidebar", got)
 	}
 	if got := m.hitTestZone(drawerW, y); got != zoneNone {
-		t.Errorf("x=drawerWidth (the gap column): got %v, want zoneNone", got)
+		t.Errorf("x=drawerW (the gap column): got %v, want zoneNone", got)
 	}
 	if got := m.hitTestZone(drawerW+1, y); got != zoneRequest {
-		t.Errorf("x=drawerWidth+1 (just past the gap): got %v, want zoneRequest", got)
+		t.Errorf("x=drawerW+1 (just past the gap): got %v, want zoneRequest", got)
 	}
 	if got := m.hitTestZone(centerStart+centerW-1, y); got != zoneRequest {
 		t.Errorf("center right edge: got %v, want zoneRequest", got)

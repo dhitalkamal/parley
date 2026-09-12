@@ -222,11 +222,6 @@ type Model struct {
 	// "visible" and "focused" are no longer the same fact the way an
 	// earlier version had it (see drawer.go's drawerOpen doc comment).
 	drawerVisible bool
-	// preDrawerFocus is whatever focus zone was active before the
-	// collections drawer opened (see drawer.go) - closeDrawer restores it
-	// when focus is still on the drawer's own list, rather than always
-	// landing back on Request regardless of where the user actually was.
-	preDrawerFocus int
 
 	// lastEscAt tracks an at-rest esc (nothing open to back out of) so a
 	// second one within escDoubleTapWindow opens the quit confirmation,

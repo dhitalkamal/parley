@@ -15,7 +15,7 @@ func TestEsc_DoesNotCloseCollectionsDrawer(t *testing.T) {
 	m := New(t.TempDir(), t.TempDir())
 	m.width, m.height = 160, 40
 	m.screen = ScreenRequest
-	m.openDrawer()
+	m.drawerVisible = true
 	m.focus = focusSidebar
 	m.updateFocus()
 	if !m.drawerOpen() {
