@@ -64,7 +64,15 @@ func (s *LastResponseStore) writeAll(entries map[string]lastResponseEntry) error
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.path(), data, 0o644)
+	// last_responses.json holds full response headers and bodies, including
+	// Set-Cookie session cookies and any tokens/PII in the payload; keep it
+	// owner-only so other local users cannot read live session material.
+	if err := os.WriteFile(s.path(), data, 0o600); err != nil {
+		return err
+	}
+	// WriteFile only applies the mode when creating the file; chmod covers a
+	// file left world/group readable by an earlier version.
+	return os.Chmod(s.path(), 0o600)
 }
 
 func (s *LastResponseStore) Save(requestPath string, resp execution.Response, elapsedMS int64) error {

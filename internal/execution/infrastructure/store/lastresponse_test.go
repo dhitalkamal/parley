@@ -1,10 +1,32 @@
 package executionstore
 
 import (
+	"os"
+	"path/filepath"
+	"testing"
+
 	collection "github.com/dhitalkamal/parley/internal/collection/domain"
 	execution "github.com/dhitalkamal/parley/internal/execution/domain"
-	"testing"
 )
+
+// TestLastResponseStore_SaveWritesOwnerOnlyFile guards that persisted
+// responses - which include Set-Cookie session cookies and any tokens/PII in
+// headers or body - are not world/group readable at rest.
+func TestLastResponseStore_SaveWritesOwnerOnlyFile(t *testing.T) {
+	root := t.TempDir()
+	s := New(root)
+	if err := s.Save("a.json", execution.Response{StatusCode: 200}, 10); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	info, err := os.Stat(filepath.Join(root, "last_responses.json"))
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("last_responses.json perm = %o, want 600 (owner-only)", perm)
+	}
+}
 
 func TestLastResponseStore_LoadOnMissingEntryReturnsNotOk(t *testing.T) {
 	s := New(t.TempDir())
