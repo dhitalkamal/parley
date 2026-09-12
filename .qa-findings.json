@@ -1,0 +1,156 @@
+[
+  {
+    "file": "internal/tui/body.go",
+    "line": 103,
+    "summary": "bodyEditor.SetBody never resets contentTypeIdx before its match loop, so loading a raw request whose RawContentType is not one of the three known values (application/json, text/plain, application/xml) leaves the previously-loaded request's content-type index in place. Body() then rebuilds the content type from rawContentTypes[stale idx], so the wrong Content-Type is sent on the wire and persisted on save.",
+    "failure_scenario": "Load request A (raw body, content type application/xml -> contentTypeIdx=2). Then load request B, a raw request imported from curl/Postman/OpenAPI whose content type is outside the 3 known values (e.g. \"application/json; charset=utf-8\" or \"text/html\", both producible by the importers). SetBody finds no match, contentTypeIdx stays 2. B now silently uses/sends/saves application/xml, corrupting its content type.",
+    "dimension": "bugs"
+  },
+  {
+    "file": "internal/tui/body.go",
+    "line": 98,
+    "summary": "bodyEditor.SetBody never resets typeIdx before its match loop, so a Body whose Type does not match any entry in bodyTypes (e.g. the empty-typed collection.Body{} used to clear the editor, since BodyNone is \"none\" not \"\") leaves the previous request's body-type index in place instead of falling back to None.",
+    "failure_scenario": "switchWorkspace (workspace_actions.go:86) calls m.body.SetBody(collection.Body{}) to clear the editor. Body{}.Type is \"\" which matches nothing in bodyTypes, so typeIdx keeps the previously loaded request's value (say Binary=5). After the switch the body editor still reports/behaves as Binary even though every other field was cleared, and a request saved from that state carries the wrong body type.",
+    "dimension": "bugs"
+  },
+  {
+    "file": "internal/tui/response.go",
+    "line": 297,
+    "summary": "highlightSearch computes match offsets on strings.ToLower(content) but slices the original content with them (end := start + len(term)). ToLower can change byte length for some Unicode characters, so lower and content offsets drift, mis-highlighting text or slicing out of range.",
+    "failure_scenario": "Search the response body for a term, or over a body, containing characters whose lowercase form differs in byte length (e.g. U+0130 '\u0130' lowercases to 2 runes / 3 bytes). lower becomes longer than content; a match near the end yields start/end offsets past len(content), so content[i:start] / content[i:] slices out of range and panics.",
+    "dimension": "bugs"
+  },
+  {
+    "file": "internal/tui/prompt.go",
+    "line": 284,
+    "summary": "On confirmDelete, m.loadedRequestPath and the response cache/last-response store are only cleared when the deleted path exactly equals loadedRequestPath. Deleting a folder that contains the currently loaded request leaves loadedRequestPath dangling into the removed directory and leaves its cached response behind.",
+    "failure_scenario": "Open a request inside folder F, then delete folder F. store.Delete removes F and its children, but loadedRequestPath (a child path of F) != target (F), so it is not cleared and delete(m.responseCache, target)/lastResponseStore.Delete(target) only touch the folder path. A later ctrl+s writes to a path whose parent no longer exists (error), and stale cached state remains.",
+    "dimension": "bugs"
+  },
+  {
+    "file": "internal/tui/response.go",
+    "line": 395,
+    "summary": "humanSize increments exp without bounding it against the units array (KB, MB, GB), so a byte count of 1 TiB or more indexes units[3] and panics. Latent/defensive only: it requires a >=1 TiB in-memory response body, which is not realistically reachable via io.ReadAll.",
+    "failure_scenario": "A response body of size >= 1024^4 bytes drives the loop to exp=3, and units[exp] reads past the end of the 3-element array (index out of range). Not reachable in practice since the whole body is held in memory.",
+    "dimension": "bugs"
+  },
+  {
+    "file": "internal/environment/infrastructure/environments.go",
+    "line": 75,
+    "summary": "Secret-flagged environment variables and captured auth tokens are persisted to disk as world/group-readable files (0644) inside a 0755 directory (~/.config/parley/environments/*.json). Same pattern for globals.json (line 110) and the active_environment marker (line 145). On any shared/multi-user host, other local users can read API tokens, passwords, and bearer secrets in cleartext. Secrets should be written 0600 in a 0700 dir.",
+    "failure_scenario": "User stores a variable marked Secret (e.g. api_token=eyJ...) in an environment. It is written to ~/.config/parley/environments/prod.json with mode 0644. A second local user on the same box runs `cat /home/victim/.config/parley/environments/prod.json` and reads the token verbatim.",
+    "dimension": "security"
+  },
+  {
+    "file": "internal/history/infrastructure/history.go",
+    "line": 47,
+    "summary": "history.jsonl is opened O_CREATE with mode 0644 and every send is appended as the full request via RequestToFile, which copies all headers verbatim (including Authorization) plus any secret-valued params/body. Credentials that were only ever typed into a header thus land in plaintext, world-readable, permanently (append-only, never masked). RequestToFile in fsstore/requestfile.go performs no redaction.",
+    "failure_scenario": "User sends a request with header `Authorization: Bearer <token>`. handleSendResult appends the entry; history.jsonl now contains the bearer token in cleartext at mode 0644. Another local user, or a backup/sync tool with broad read scope, harvests every token the user has ever sent.",
+    "dimension": "security"
+  },
+  {
+    "file": "internal/execution/infrastructure/store/lastresponse.go",
+    "line": 66,
+    "summary": "last_responses.json is written mode 0644 and stores the full response Headers and Body per request (lines 74-80), including Set-Cookie session cookies and any tokens/PII in the response body, persisted across restarts. World/group-readable exposure of session material with no masking or redaction.",
+    "failure_scenario": "A login request returns `Set-Cookie: session=...` and a JSON body containing an access token. On success handleSendResult calls lastResponseStore.Save, writing the cookie and token into ~/.config/parley/last_responses.json at 0644. Any local user reads the live session cookie and replays it.",
+    "dimension": "security"
+  },
+  {
+    "file": "internal/collection/infrastructure/fs.go",
+    "line": 130,
+    "summary": "LoadRequest joins Store.Root with a caller-supplied path with no check that the result stays inside Root (filepath.Join cleans but does not contain '..'). The path can originate from an externally-controlled Refresh.RequestPath field, which is deserialized verbatim from a saved/imported request file (fsstore/requestfile.go:42-44) and passed straight to LoadRequest by triggerRefresh (internal/tui/send_refresh.go:41). SaveRequest/UpdateRequest/Delete share the same unbounded join.",
+    "failure_scenario": "A shared or imported collection contains a request whose refresh.requestPath is `../../../../etc/some.json` (or a relative path to another user's parley file). On send, triggerRefresh -> LoadRequest reads outside the collections root; if the target is valid request JSON its contents (e.g. another environment's stored tokens) are then substituted and sent to the configured URL, exfiltrating file contents.",
+    "dimension": "security"
+  },
+  {
+    "file": "internal/tui/secretmask.go",
+    "line": 11,
+    "summary": "On-screen masking of request/response bodies and header tables relies solely on the key-name regex (password|token|secret|authorization) and ignores the user's explicit Secret flag (that flag is only honored in the env panel, not in body/header rendering). Common secret keys such as apiKey, x-api-key, access_key, client_id, and Set-Cookie do not match and render in cleartext, defeating the masking control during screen-share/shoulder-surf.",
+    "failure_scenario": "A response body contains `\"x-api-key\": \"live_...\"` or a header `Set-Cookie: session=...`. maskSecrets/maskedValue leave both unmasked because the key does not match the regex, so the secret is displayed even with reveal off while the user screen-shares.",
+    "dimension": "security"
+  },
+  {
+    "file": "internal/tui/sidebar_commands.go",
+    "line": 369,
+    "summary": "autosaveAfter runs after every keystroke/mouse event on the request screen and, on any content change, does a synchronous request-file write (UpdateRequest, line 363) immediately followed by refreshTree (line 369) which re-reads every request file in the whole collection tree via store.Tree. Typing one character into a loaded request's URL/body/params therefore triggers one blocking disk write plus O(files) blocking disk reads, on the hottest possible path (character-by-character editing).",
+    "failure_scenario": "User opens a saved request in a collection containing, say, 300 request files and types a URL. Each keystroke calls UpdateRequest (write) then refreshTree -> Tree() -> buildNode, which os.ReadFile's all 300 files to recompute method badges. Result: ~300 synchronous file reads plus a write per character, causing visible input lag / stutter that scales with collection size.",
+    "dimension": "perf"
+  },
+  {
+    "file": "internal/collection/infrastructure/fs.go",
+    "line": 113,
+    "summary": "buildNode reads and JSON-decodes the full contents of every request file (os.ReadFile + decodeRequest) purely to populate the sidebar method badge. Tree() walks the entire tree this way. Because refreshTree() (called on every autosave and every structural change) invokes Tree(), this per-file read is on a hot path, not just startup.",
+    "failure_scenario": "Large collection (hundreds/thousands of requests). Every refreshTree() call (each editing keystroke via autosave, each create/rename/delete/move) re-reads and re-parses every file on disk, turning what should be a directory listing into O(total request bytes) of I/O and JSON parsing per invocation.",
+    "dimension": "perf"
+  },
+  {
+    "file": "internal/tui/ws_session.go",
+    "line": 133,
+    "summary": "wsSession.transcript grows without bound (appendFrame at line 133) and the send history (recordSent at line 144) also appends unbounded despite the 'history ring' comment - there is no cap or eviction anywhere. A long-lived, chatty WebSocket connection accumulates every frame in memory for the life of the session.",
+    "failure_scenario": "User connects to a high-frequency WebSocket stream (e.g. a market-data or log feed emitting many messages/sec) and leaves it open. transcript grows one wsEvent per received frame indefinitely, consuming ever-increasing memory with no upper bound until the process is killed.",
+    "dimension": "perf"
+  },
+  {
+    "file": "internal/tui/ws_view.go",
+    "line": 116,
+    "summary": "wsBuildTranscript re-renders every transcript entry (loop at line 116-118, including per-entry lipgloss styling and JSON pretty-printing for expanded entries) and is called by refreshWSPane on every single incoming frame (onWSIncoming -> refreshWSPane, ws_keys.go:282). Rendering all N prior events on each of N arrivals is O(N^2) work over a session.",
+    "failure_scenario": "On a chatty socket, the 1000th incoming message triggers a full re-render of all 1000 transcript blocks; the 2000th re-renders 2000, etc. CPU per message rises linearly with backlog, so a fast stream progressively degrades UI responsiveness even though only the newest line changed.",
+    "dimension": "perf"
+  },
+  {
+    "file": "internal/tui/response.go",
+    "line": 488,
+    "summary": "In responseView.Update, while Visual line-select is active, every scroll key calls rv.refresh() (line 488-489), which re-runs DetectAndRender over the entire raw body (PrettyJSON/PrettyXML parse + regex-based HighlightJSON + secret masking) and re-splits into lines. The highlighted body is identical across scrolls - only the visual selection overlay changes - so all of that heavy work is redundant on each j/k keystroke.",
+    "failure_scenario": "User views a large JSON response (say a few hundred KB), enters Visual mode (v) and holds j to extend the selection. Each repeat re-parses and re-syntax-highlights the whole body via regexp ReplaceAllStringFunc, causing per-keystroke lag proportional to body size when nothing about the rendered body actually changed.",
+    "dimension": "perf"
+  },
+  {
+    "file": "internal/tui/dashboard_view.go",
+    "line": 75,
+    "summary": "dashboardScreenView recomputes derived data multiple times per render: dashboardState.filteredRuns() (allocates a full row slice and lowercases every label) is invoked separately by shownRuns, selectedRun, and dashboardRunHistoryContent within a single frame, and computeDashboardOverview iterates all runs (with nested runPassed loops over all results) on every frame. Since the dashboard repaints on each 1s clock tick, all of this recomputes once a second over the entire, unbounded run history.",
+    "failure_scenario": "After many recorded runs accumulate in runs.jsonl, opening the dashboard makes every clock tick re-run filteredRuns 3+ times plus a full-history overview aggregation, redundantly allocating and scanning the whole run set each second while the screen is just idling.",
+    "dimension": "perf"
+  },
+  {
+    "file": "internal/tui/statusbar.go",
+    "line": 80,
+    "summary": "Entire segmented status-line cluster is dead production code. isProdEnv (13), statusChip (22), envChip (45), modeChip (65), segmentedStatusLine (80), responseStatusRight (110) are reachable only from statusbar_test.go, never from a live render path. The app now uses per-screen status bars (dashboardStatusBar, collectionsStatusBar, settingsStatusBar) and the shortcuts rail instead. The whole file plus its test can be deleted.",
+    "failure_scenario": "deadcode ./... flags all six funcs as unreachable from main; grep shows their only non-comment callers are statusbar_test.go and each other. The tests give false confidence by exercising code no user path hits.",
+    "dimension": "maintainability"
+  },
+  {
+    "file": "internal/tui/view.go",
+    "line": 23,
+    "summary": "Top-bar removal (topBarHeight=0) orphaned a large cluster. hitTestZone (mouse.go:35) never returns zoneTopBar, so the zoneTopBar case in handleMouseClick (mouse.go:127-143) is unreachable, and with it topBarContent, topBarView (topbar.go:94), colorizeEnvSegment (topbar.go:75), topBarRightText, envSegmentText (envpill.go:29), envPillColor (envpill.go:10), and the click helpers workspaceLabelAt/envSegmentAt/profileIconAt (mouse.go:351/370/381). zoneEnv (mouse.go:26) is a declared enum value that is never returned.",
+    "failure_scenario": "With topBarHeight and tabStripHeight both pinned to 0, y>=urlRowHeight always routes clicks to the grid; no coordinate can land in zoneTopBar. The whole top-bar render+hit-test machinery compiles into the binary and is maintained but can never execute in production; only topbar_test.go/mouse_test.go keep it alive.",
+    "dimension": "maintainability"
+  },
+  {
+    "file": "internal/tui/drawer.go",
+    "line": 31,
+    "summary": "Two divergent drawer open/close paths with different semantics. openDrawer (31) and closeDrawer (46) are dead (only drawer tests call them), while the live binding toggleDrawer (62) flips drawerVisible directly and never touches preDrawerFocus. The preDrawerFocus field (root.go:229) is therefore dead state, written/read only by the dead pair. drawer_view.go drawerWidth (6) and workspaceXOffset (29) are dead too.",
+    "failure_scenario": "toggleDrawer restores focus via releaseFocusFrom, but closeDrawer restores it via preDrawerFocus - a maintainer editing focus behavior must reconcile two code paths, one of which never runs. Tests pass against the dead path, masking that the real toggle has different focus-restore logic.",
+    "dimension": "maintainability"
+  },
+  {
+    "file": "internal/tui/envs.go",
+    "line": 12,
+    "summary": "Model.envLabel is fully dead: zero references anywhere, including tests (unlike the other dead funcs which at least have tests).",
+    "failure_scenario": "grep for envLabel returns only its own definition; deadcode flags it. Pure orphan left over from an earlier status-line design.",
+    "dimension": "maintainability"
+  },
+  {
+    "file": "internal/tui/paneltitle.go",
+    "line": 56,
+    "summary": "panelTitleText builds the old numbered [N] panel titles and is dead - workspace_view.go:50's own comment says it was replaced by the non-numbered title path. Only paneltitle_test.go references it.",
+    "failure_scenario": "deadcode flags panelTitleText; the live titling goes through zoneHeaderText/titledBox. Dead helper plus its test remain as noise.",
+    "dimension": "maintainability"
+  },
+  {
+    "file": "internal/tui/dashboard_view.go",
+    "line": 40,
+    "summary": "Duplicated screen-frame boilerplate with no shared abstraction. The 'contentHeight := m.height - topBarHeight - tabStripHeight - helpBarHeight; if < 3 { 3 }' clamp is copy-pasted (dashboard_view.go:40, screen_collections.go:53), and the footer composition padLinesTo(strings.Join([]string{content, status}, \"\\n\"), m.height) is repeated 6 times across dashboard_view.go (37/80/103), screen_collections.go (64/76), screen_settings.go (75).",
+    "failure_scenario": "Changing footer/status layout or the min-height clamp requires editing 6+ call sites in lockstep; missing one silently desyncs a screen's frame height. A small screenFrame(content, status) helper would centralize it.",
+    "dimension": "maintainability"
+  }
+]

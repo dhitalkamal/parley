@@ -8,7 +8,7 @@ import (
 
 // networkErrorHint turns a failed request's raw error into a short, plain-
 // language hint - classifying the common network failures and noting the
-// current VPN state (see netcheck.DetectVPN) so a gated endpoint that times out
+// current VPN state (see netcheck.DetectVPNs) so a gated endpoint that times out
 // reads as "connect your VPN" rather than a cryptic ETIMEDOUT. Returns "" for
 // errors that aren't connectivity failures (those speak for themselves).
 func networkErrorHint(err error, detectedVPN, expectedVPN string) string {

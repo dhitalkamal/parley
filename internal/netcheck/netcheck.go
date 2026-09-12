@@ -116,8 +116,3 @@ func DetectVPNs() []string {
 	return names
 }
 
-// DetectVPN is DetectVPNs joined for display - every active tunnel,
-// comma-separated (so multiple VPNs all show), or "" when none is up.
-func DetectVPN() string {
-	return strings.Join(DetectVPNs(), ", ")
-}

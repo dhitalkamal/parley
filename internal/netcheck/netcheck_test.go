@@ -1,6 +1,7 @@
 package netcheck
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -20,7 +21,7 @@ func TestDetectVPN_FindsPointToPointTunnel(t *testing.T) {
 		{name: "docker0", up: true, broadcast: true, hasRoutableIP: true},
 		{name: "tailscale0", up: true, pointToPoint: true, hasRoutableIP: true},
 	})
-	if got := DetectVPN(); got != "tailscale0" {
+	if got := strings.Join(DetectVPNs(), ", "); got != "tailscale0" {
 		t.Errorf("DetectVPN() = %q, want tailscale0", got)
 	}
 }
@@ -31,7 +32,7 @@ func TestDetectVPN_FindsOddlyNamedWireGuard(t *testing.T) {
 		{name: "enp3s0", up: true, broadcast: true, hasRoutableIP: true},
 		{name: "backend-kamal", up: true, hasRoutableIP: true}, // WireGuard: no broadcast
 	})
-	if got := DetectVPN(); got != "backend-kamal" {
+	if got := strings.Join(DetectVPNs(), ", "); got != "backend-kamal" {
 		t.Errorf("DetectVPN() = %q, want backend-kamal", got)
 	}
 }
@@ -44,7 +45,7 @@ func TestDetectVPN_DownTunnelKeepsInterfaceButLosesIP(t *testing.T) {
 		{name: "wlan0", up: true, broadcast: true, hasRoutableIP: true},
 		{name: "tailscale0", up: true, pointToPoint: true, hasRoutableIP: false}, // down: no IP
 	})
-	if got := DetectVPN(); got != "" {
+	if got := strings.Join(DetectVPNs(), ", "); got != "" {
 		t.Errorf("DetectVPN() = %q, want empty (tunnel up but no IP = disconnected)", got)
 	}
 }
@@ -57,7 +58,7 @@ func TestDetectVPN_NoneWhenOnlyPhysicalAndBridges(t *testing.T) {
 		{name: "docker0", up: true, broadcast: true, hasRoutableIP: true},
 		{name: "veth1234", up: true, broadcast: true, hasRoutableIP: true},
 	})
-	if got := DetectVPN(); got != "" {
+	if got := strings.Join(DetectVPNs(), ", "); got != "" {
 		t.Errorf("DetectVPN() = %q, want empty (no VPN)", got)
 	}
 }
@@ -73,7 +74,7 @@ func TestDetectVPNs_ReportsMultiple(t *testing.T) {
 	if len(got) != 2 || got[0] != "tailscale0" || got[1] != "backend-kamal" {
 		t.Errorf("DetectVPNs() = %v, want [tailscale0 backend-kamal]", got)
 	}
-	if s := DetectVPN(); s != "tailscale0, backend-kamal" {
+	if s := strings.Join(DetectVPNs(), ", "); s != "tailscale0, backend-kamal" {
 		t.Errorf("DetectVPN() = %q, want the two joined", s)
 	}
 }
