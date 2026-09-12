@@ -65,14 +65,17 @@ func (s *EnvStore) SaveEnvironment(env environment.Environment) error {
 	if err := fsstore.ValidateName(env.Name); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(s.environmentsDir(), 0o755); err != nil {
+	// environments/ can hold secret-flagged variables and captured auth tokens,
+	// so keep the dir owner-only (0700) and each file owner read/write only
+	// (0600). Never world/group readable.
+	if err := os.MkdirAll(s.environmentsDir(), 0o700); err != nil {
 		return err
 	}
 	data, err := encodeEnvironment(env)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.environmentsDir(), env.Name+".json"), data, 0o644)
+	return os.WriteFile(filepath.Join(s.environmentsDir(), env.Name+".json"), data, 0o600)
 }
 
 func (s *EnvStore) DeleteEnvironment(name string) error {
@@ -107,7 +110,8 @@ func (s *EnvStore) SaveGlobals(env environment.Environment) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.globalsPath(), data, 0o644)
+	// globals.json can hold secret-flagged variables, so keep it owner-only.
+	return os.WriteFile(s.globalsPath(), data, 0o600)
 }
 
 func (s *EnvStore) activeNamePath() string {
@@ -142,7 +146,7 @@ func (s *EnvStore) SetActiveName(name string) error {
 	if err := os.MkdirAll(s.ProjectRoot, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(s.activeNamePath(), []byte(name), 0o644)
+	return os.WriteFile(s.activeNamePath(), []byte(name), 0o600)
 }
 
 type variableFile struct {

@@ -192,3 +192,39 @@ func TestEnvStore_ActiveNameRoundTrips(t *testing.T) {
 		t.Errorf("got %q, want staging", got)
 	}
 }
+
+// secret-bearing files must not be world/group readable, and the
+// environments dir that holds them must be owner-only.
+func TestEnvStore_SecretFilesWrittenWithRestrictivePerms(t *testing.T) {
+	root := t.TempDir()
+	s := New(root)
+
+	env := environment.Environment{
+		Name:      "prod",
+		Variables: []environment.Variable{{Key: "token", Value: "eyJsecret", Enabled: true, Secret: true}},
+	}
+	if err := s.SaveEnvironment(env); err != nil {
+		t.Fatalf("SaveEnvironment error: %v", err)
+	}
+	if err := s.SaveGlobals(env); err != nil {
+		t.Fatalf("SaveGlobals error: %v", err)
+	}
+	if err := s.SetActiveName("prod"); err != nil {
+		t.Fatalf("SetActiveName error: %v", err)
+	}
+
+	assertPerm := func(path string, want os.FileMode) {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatalf("stat %s: %v", path, err)
+		}
+		if got := info.Mode().Perm(); got != want {
+			t.Errorf("%s perm = %o, want %o", path, got, want)
+		}
+	}
+
+	assertPerm(filepath.Join(root, "environments"), 0o700)
+	assertPerm(filepath.Join(root, "environments", "prod.json"), 0o600)
+	assertPerm(filepath.Join(root, "globals.json"), 0o600)
+	assertPerm(filepath.Join(root, "active_environment"), 0o600)
+}
