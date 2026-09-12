@@ -86,6 +86,18 @@ type wsSession struct {
 	selected int
 	expanded map[int]bool
 
+	// rendered-block cache for the transcript, parallel to transcript. Rendering
+	// each entry (lipgloss styling + JSON pretty-print) is the costly part of a
+	// refresh, and refreshWSPane runs on every incoming frame, so we cache blocks
+	// and recompute only the ones whose inputs changed instead of re-rendering the
+	// whole backlog each time (that was O(N^2) over a session). See
+	// wsBuildTranscript. cacheSel is the index rendered with the selection marker
+	// (-1 for none); cacheWidth/cacheFocused invalidate the whole cache on change.
+	blockCache   []string
+	cacheWidth   int
+	cacheFocused bool
+	cacheSel     int
+
 	// sent-message history recall (session-only ring). historyIdx == len(history)
 	// means "not currently browsing".
 	history    []string

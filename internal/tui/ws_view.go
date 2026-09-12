@@ -102,9 +102,11 @@ func wsScrollTo(vp *viewport.Model, start, end int) {
 	}
 }
 
-// wsBuildTranscript renders every transcript line and returns the content plus
-// the first/last display-line of the selected message (for scrolling). Each
-// message is one block (possibly multi-line when expanded/wrapped).
+// wsBuildTranscript returns the rendered transcript plus the first/last
+// display-line of the selected message (for scrolling). Each message is one
+// block (possibly multi-line when expanded/wrapped). Blocks are cached on the
+// pane; only entries whose inputs changed since the last build are re-rendered,
+// so a refresh costs work proportional to what changed, not to the backlog.
 func wsBuildTranscript(pane *wsSession, focused bool) (content string, selStart, selEnd int) {
 	width := pane.vp.Width
 	if width < 10 {
@@ -113,19 +115,50 @@ func wsBuildTranscript(pane *wsSession, focused bool) (content string, selStart,
 	if len(pane.transcript) == 0 {
 		return labelStyle.Render("Not connected. Enter a ws:// or wss:// URL above and press enter."), 0, 0
 	}
-	blocks := make([]string, len(pane.transcript))
-	for i, e := range pane.transcript {
-		blocks[i] = wsEventBlock(e, width, pane.expanded[i], focused && i == pane.selected)
-	}
+	wsSyncBlockCache(pane, width, focused)
 	cur := 0
-	for i, blk := range blocks {
+	for i, blk := range pane.blockCache {
 		if i == pane.selected {
 			selStart = cur
 			selEnd = cur + strings.Count(blk, "\n")
 		}
 		cur += strings.Count(blk, "\n") + 1
 	}
-	return strings.Join(blocks, "\n"), selStart, selEnd
+	return strings.Join(pane.blockCache, "\n"), selStart, selEnd
+}
+
+// wsSyncBlockCache brings pane.blockCache up to date for the given width and
+// focus, re-rendering only what changed. A width or focus flip changes every
+// block (wrap width, or whether gutters/markers are drawn) so the whole cache
+// is rebuilt; otherwise the only blocks that can change without a new append are
+// the selected one (its expand state may have toggled) and the previously
+// selected one (its marker must be dropped).
+func wsSyncBlockCache(pane *wsSession, width int, focused bool) {
+	if width != pane.cacheWidth || focused != pane.cacheFocused {
+		pane.blockCache = pane.blockCache[:0]
+		pane.cacheWidth = width
+		pane.cacheFocused = focused
+		pane.cacheSel = -1
+	}
+	// render entries appended since the last build.
+	for i := len(pane.blockCache); i < len(pane.transcript); i++ {
+		sel := focused && i == pane.selected
+		pane.blockCache = append(pane.blockCache, wsEventBlock(pane.transcript[i], width, pane.expanded[i], sel))
+	}
+	// defensive: the transcript only grows today, but keep the cache in bounds.
+	if len(pane.blockCache) > len(pane.transcript) {
+		pane.blockCache = pane.blockCache[:len(pane.transcript)]
+	}
+	if !focused {
+		return
+	}
+	if pane.cacheSel != pane.selected && pane.cacheSel >= 0 && pane.cacheSel < len(pane.blockCache) {
+		pane.blockCache[pane.cacheSel] = wsEventBlock(pane.transcript[pane.cacheSel], width, pane.expanded[pane.cacheSel], false)
+	}
+	if pane.selected >= 0 && pane.selected < len(pane.blockCache) {
+		pane.blockCache[pane.selected] = wsEventBlock(pane.transcript[pane.selected], width, pane.expanded[pane.selected], true)
+	}
+	pane.cacheSel = pane.selected
 }
 
 // wsEventBlock formats one transcript entry, soft-wrapped to width. A selected
