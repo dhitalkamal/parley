@@ -304,11 +304,11 @@ func (rv responseView) StatusLine() string {
 		// messages for the same "nothing sent" state.
 		return ""
 	}
-	// "  |  " matches the top bar's own segment separator (see
-	// topBarContent) - a user found the status/timing/size/hint run
-	// together with only double-spacing between them too dense to scan at
-	// a glance, and this is the app's own established way of visually
-	// separating several unrelated pieces of information on one line.
+	// "  |  " is the app's own established segment separator - a user found
+	// the status/timing/size/hint run together with only double-spacing
+	// between them too dense to scan at a glance, and this is the app's own
+	// established way of visually separating several unrelated pieces of
+	// information on one line.
 	statusPart := statusClassStyle(rv.statusCode).Render(rv.status) +
 		labelStyle.Render(fmt.Sprintf("  |  %d ms  |  %s", rv.elapsedMS, humanSize(rv.sizeBytes)))
 	// "y copy"/"Y line" are always worth advertising once there's

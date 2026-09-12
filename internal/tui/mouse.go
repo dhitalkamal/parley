@@ -3,8 +3,6 @@ package tui
 import (
 	"fmt"
 	collection "github.com/dhitalkamal/parley/internal/collection/domain"
-	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -20,10 +18,8 @@ type clickZone int
 
 const (
 	zoneNone clickZone = iota
-	zoneTopBar
 	zoneMethod
 	zoneURL
-	zoneEnv
 	zoneSend
 	zoneSidebar
 	zoneRequest
@@ -124,23 +120,6 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) handleMouseClick(x, y int) (tea.Model, tea.Cmd) {
 	switch m.hitTestZone(x, y) {
-	case zoneTopBar:
-		// topBarStyle's own Padding(0, 1) shifts every rendered column right
-		// by 1 from the raw click x.
-		line := m.topBarContent(m.width, time.Now())
-		switch {
-		case workspaceLabelAt(line, m.activeWorkspaceName, x-1):
-			m.openWorkspaceSwitcher()
-		case envSegmentAt(line, m.activeEnvName, x-1):
-			m.focus = focusEnv
-			m.updateFocus()
-			m.openEnvDropdown()
-		case profileIconAt(line, x-1):
-			m.status = "Theme: " + cycleTheme()
-			m.sidebar.RefreshDelegate()
-			m.palette.RefreshDelegate()
-		}
-		return m, nil
 	case zoneMethod:
 		m.focus = focusMethod
 		m.methodIdx = (m.methodIdx + 1) % len(collection.Methods)
@@ -346,45 +325,4 @@ func reqTabAt(paramsCount, headersCount int, hasBody bool, x int) (reqTab, bool)
 func responseModeTabAt(x int) (responseViewMode, bool) {
 	idx, ok := tabLabelAt(responseModeLabels(), x)
 	return responseViewMode(idx), ok
-}
-
-// workspaceLabelAt reports whether x landed on the "workspace: <name>"
-// segment of the top bar - it searches line (the top bar's own rendered
-// content, see topBarContent) for where the segment starts rather than
-// recomputing the column math separately, so it can never drift out of
-// sync with what's actually rendered. Always false when no workspace name
-// is set (no registry wired up), matching topBarRightText leaving the
-// segment out entirely in that case.
-func workspaceLabelAt(line, workspaceName string, x int) bool {
-	if workspaceName == "" {
-		return false
-	}
-	start := strings.Index(line, "workspace:")
-	if start < 0 {
-		return false
-	}
-	end := start + len("workspace: "+workspaceName)
-	return x >= start && x < end
-}
-
-// envSegmentAt reports whether x landed on the top bar's environment pill
-// segment - same line-search approach as workspaceLabelAt.
-func envSegmentAt(line, envName string, x int) bool {
-	seg := envSegmentText(envName)
-	start := strings.Index(line, seg)
-	if start < 0 {
-		return false
-	}
-	return x >= start && x < start+len(seg)
-}
-
-// profileIconAt reports whether x landed on the top bar's profile control
-// (see profileIconLabel) - same line-search approach as workspaceLabelAt.
-func profileIconAt(line string, x int) bool {
-	start := strings.Index(line, profileIconLabel)
-	if start < 0 {
-		return false
-	}
-	end := start + len(profileIconLabel)
-	return x >= start && x < end
 }

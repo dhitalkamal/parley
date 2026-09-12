@@ -19,19 +19,3 @@ func envPillColor(envName string) string {
 		return activeTheme.FgDim
 	}
 }
-
-// envSegmentText is the top bar's environment pill segment as plain text -
-// a status LED ("*" filled when an environment is active, "o" hollow when
-// none is) plus the name, or "none". Kept plain (uncolored) here so mouse.go
-// can find it with a simple string search, the same convention
-// workspaceLabelAt/profileIconAt already rely on - color is applied
-// afterward, only for display (see topBarView's colorizeEnvSegment).
-func envSegmentText(envName string) string {
-	label := envName
-	led := "*"
-	if label == "" {
-		label = "none"
-		led = "o"
-	}
-	return led + " " + label
-}

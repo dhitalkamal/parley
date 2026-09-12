@@ -23,17 +23,3 @@ func TestEnvPillColor_MatchesEnvironmentNameCaseInsensitively(t *testing.T) {
 		}
 	}
 }
-
-func TestEnvSegmentText_ShowsNoneWhenNoEnvironmentActive(t *testing.T) {
-	got := envSegmentText("")
-	if got != "o none" {
-		t.Errorf("envSegmentText(\"\") = %q, want %q", got, "o none")
-	}
-}
-
-func TestEnvSegmentText_ShowsTheActiveEnvironmentName(t *testing.T) {
-	got := envSegmentText("staging")
-	if got != "* staging" {
-		t.Errorf("envSegmentText(\"staging\") = %q, want %q", got, "* staging")
-	}
-}
