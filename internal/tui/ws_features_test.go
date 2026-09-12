@@ -301,3 +301,45 @@ func TestWS_AutosaveSkippedOnScreenSwitch(t *testing.T) {
 		t.Errorf("a screen switch must not clobber the saved ws request, got %+v", reloaded)
 	}
 }
+
+// TestWSTranscript_TrimRebuildsBlockCache guards the trim/cache interaction:
+// trimTranscript evicts the oldest transcript entries, but the rendered
+// blockCache must not be left showing stale, index-shifted content. After a
+// trim the newest frames must display and the evicted ones must be gone.
+func TestWSTranscript_TrimRebuildsBlockCache(t *testing.T) {
+	s := newWSSession()
+	s.vp.Width = 80
+	at := time.Unix(0, 0)
+
+	// fill to the cap, then render so blockCache is fully populated pre-trim.
+	for i := 0; i < maxTranscript; i++ {
+		s.appendFrame(wsRecv, "msg-"+itoa(i), false, at)
+	}
+	wsBuildTranscript(&s, false)
+
+	// append past the trim threshold so the oldest entries are evicted.
+	for i := maxTranscript; i <= maxTranscript+wsTrimChunk; i++ {
+		s.appendFrame(wsRecv, "msg-"+itoa(i), false, at)
+	}
+
+	content, _, _ := wsBuildTranscript(&s, false)
+	newest := "msg-" + itoa(maxTranscript+wsTrimChunk)
+	if !strings.Contains(content, newest) {
+		t.Errorf("after trim the newest frame %q is missing (stale block cache)", newest)
+	}
+	if strings.Contains(content, "msg-0 ") || strings.Contains(content, "msg-0\n") {
+		t.Errorf("after trim the evicted frame msg-0 is still shown (stale block cache)")
+	}
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b []byte
+	for n > 0 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+		n /= 10
+	}
+	return string(b)
+}

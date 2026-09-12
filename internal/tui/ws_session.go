@@ -173,6 +173,19 @@ func (s *wsSession) trimTranscript() {
 	// released rather than retained behind a re-slice.
 	s.transcript = append([]wsEvent(nil), s.transcript[over:]...)
 
+	// blockCache is parallel to transcript (index i renders transcript[i]), so
+	// it must be front-evicted by the same amount or it would keep showing the
+	// old, index-shifted blocks - after a trim the lengths can coincide and the
+	// lazy tail-append in wsSyncBlockCache would never correct it. cacheSel is a
+	// transcript index too; reset it so the previous-selection marker cleanup
+	// does not touch the wrong (shifted) block.
+	if over < len(s.blockCache) {
+		s.blockCache = append([]string(nil), s.blockCache[over:]...)
+	} else {
+		s.blockCache = s.blockCache[:0]
+	}
+	s.cacheSel = -1
+
 	s.selected -= over
 	if s.selected < 0 {
 		s.selected = 0
