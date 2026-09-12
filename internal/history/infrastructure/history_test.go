@@ -126,6 +126,44 @@ func TestHistoryStore_ReadsOlderLinesMissingRequestPath(t *testing.T) {
 	}
 }
 
+// TestHistoryStore_AppendUsesOwnerOnlyPerms guards that history.jsonl, which
+// stores full requests verbatim (Authorization headers, secret params/body),
+// is not readable by other local users or broad-scope backup tools.
+func TestHistoryStore_AppendUsesOwnerOnlyPerms(t *testing.T) {
+	root := t.TempDir()
+	s := New(root)
+	if err := s.AppendHistory(history.HistoryEntry{Time: time.Now(), Request: collection.Request{URL: "https://example.com"}}); err != nil {
+		t.Fatalf("append error: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(root, "history.jsonl"))
+	if err != nil {
+		t.Fatalf("stat error: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("history.jsonl perm = %04o, want 0600", perm)
+	}
+}
+
+// TestHistoryStore_AppendTightensLegacyPerms guards that a history.jsonl left
+// world-readable by an older build is re-tightened to 0600 on the next append.
+func TestHistoryStore_AppendTightensLegacyPerms(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "history.jsonl"), []byte(""), 0o644); err != nil {
+		t.Fatalf("seed write error: %v", err)
+	}
+	s := New(root)
+	if err := s.AppendHistory(history.HistoryEntry{Time: time.Now(), Request: collection.Request{URL: "https://example.com"}}); err != nil {
+		t.Fatalf("append error: %v", err)
+	}
+	info, err := os.Stat(filepath.Join(root, "history.jsonl"))
+	if err != nil {
+		t.Fatalf("stat error: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("history.jsonl perm = %04o, want 0600", perm)
+	}
+}
+
 func TestHistoryStore_StoredAsJSONLAtProjectRoot(t *testing.T) {
 	root := t.TempDir()
 	s := New(root)

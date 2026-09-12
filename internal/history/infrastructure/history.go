@@ -44,11 +44,18 @@ func (s *HistoryStore) AppendHistory(entry history.HistoryEntry) error {
 	if err := os.MkdirAll(s.ProjectRoot, 0o755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(s.path(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	// history.jsonl records full requests verbatim (headers like Authorization,
+	// secret-valued params/body), so it must not be world- or group-readable.
+	// 0o600 on create; explicit Chmod tightens any file left at looser perms by
+	// an older build (O_CREATE only sets the mode when the file is new).
+	f, err := os.OpenFile(s.path(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	if err := f.Chmod(0o600); err != nil {
+		return err
+	}
 
 	line := historyLine{
 		Time:        entry.Time,
