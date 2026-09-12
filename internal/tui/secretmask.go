@@ -5,10 +5,14 @@ import (
 	"strings"
 )
 
-// secretKeyPattern matches a key name that looks like it holds a secret -
-// password, token, secret, or authorization, case-insensitively, as a
-// substring so keys like "apiToken" or "auth_token" still match.
-var secretKeyPattern = regexp.MustCompile(`(?i)password|token|secret|authorization`)
+// secretKeyPattern matches a key name that looks like it holds a secret,
+// case-insensitively, as a substring so keys like "apiToken" or "auth_token"
+// still match. The optional [_-]? separators cover the common casings
+// (apiKey, api_key, api-key, x-api-key). Covers passwords, tokens, generic
+// secrets, authorization, api/access keys, oauth client ids, cookies (incl.
+// Set-Cookie), credentials, and private keys - the on-screen masking control
+// has to catch these so they are not exposed during a screen-share.
+var secretKeyPattern = regexp.MustCompile(`(?i)password|passwd|token|secret|authorization|api[_-]?key|access[_-]?key|client[_-]?id|cookie|credential|private[_-]?key`)
 
 func looksLikeSecretKey(key string) bool {
 	return secretKeyPattern.MatchString(key)

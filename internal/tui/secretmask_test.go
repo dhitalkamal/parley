@@ -14,9 +14,18 @@ func TestLooksLikeSecretKey_MatchesCaseInsensitiveSubstrings(t *testing.T) {
 		{"clientSecret", true},
 		{"Authorization", true},
 		{"authorization", true},
-		{"apiKey", false},
+		{"apiKey", true},
+		{"api_key", true},
+		{"x-api-key", true},
+		{"access_key", true},
+		{"client_id", true},
+		{"Set-Cookie", true},
+		{"Cookie", true},
+		{"credential", true},
 		{"username", false},
 		{"Content-Length", false},
+		{"Content-Type", false},
+		{"Accept", false},
 	}
 	for _, c := range cases {
 		if got := looksLikeSecretKey(c.key); got != c.want {
