@@ -368,12 +368,14 @@ func humanSize(n int) string {
 	if n < 1024 {
 		return fmt.Sprintf("%d bytes", n)
 	}
+	units := [...]string{"KB", "MB", "GB"}
 	div, exp := 1024.0, 0
-	for m := n / 1024; m >= 1024; m /= 1024 {
+	// stop climbing units once we hit the largest one we know about, so exp
+	// can never index past the end of the array for a >=1 TiB byte count.
+	for m := n / 1024; m >= 1024 && exp < len(units)-1; m /= 1024 {
 		div *= 1024
 		exp++
 	}
-	units := [...]string{"KB", "MB", "GB"}
 	return fmt.Sprintf("%.1f %s", float64(n)/div, units[exp])
 }
 
