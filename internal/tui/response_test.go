@@ -1,6 +1,7 @@
 package tui
 
 import (
+	collection "github.com/dhitalkamal/parley/internal/collection/domain"
 	execution "github.com/dhitalkamal/parley/internal/execution/domain"
 	"strings"
 	"testing"
@@ -429,5 +430,33 @@ func TestResponseView_StatusLineHintsAtLineCopy(t *testing.T) {
 
 	if got := rv.StatusLine(); !strings.Contains(got, "Y line") {
 		t.Errorf("StatusLine() = %q, want a \"Y line\" hint", got)
+	}
+}
+
+// TestResponseView_CookiesTabMasksValuesUnlessRevealed guards that the Cookies
+// tab hides cookie values (session identifiers/tokens) by default, revealing
+// them only when the global reveal toggle is on. Non-secret attributes
+// (Path/Domain) stay visible either way.
+func TestResponseView_CookiesTabMasksValuesUnlessRevealed(t *testing.T) {
+	rv := newResponseView()
+	rv.headers = []collection.Header{
+		{Key: "Set-Cookie", Value: "session=secretvalue123; Path=/; HttpOnly"},
+	}
+
+	masked := stripANSI(rv.cookiesText())
+	if strings.Contains(masked, "secretvalue123") {
+		t.Errorf("cookie value must be masked by default, got:\n%s", masked)
+	}
+	if !strings.Contains(masked, "session") {
+		t.Errorf("cookie name should still show, got:\n%s", masked)
+	}
+	if !strings.Contains(masked, "Path: /") {
+		t.Errorf("non-secret cookie attributes should still show, got:\n%s", masked)
+	}
+
+	rv.revealSecrets = true
+	shown := stripANSI(rv.cookiesText())
+	if !strings.Contains(shown, "secretvalue123") {
+		t.Errorf("reveal should show the cookie value, got:\n%s", shown)
 	}
 }

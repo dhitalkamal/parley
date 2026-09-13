@@ -248,7 +248,15 @@ func (rv responseView) cookiesText() string {
 	}
 	var b strings.Builder
 	for _, c := range cookies {
-		fmt.Fprintf(&b, "%s = %s\n", c.Name, c.Value)
+		// a cookie value is a session identifier/token - inherently sensitive
+		// regardless of its name - so mask it by default, revealable with the
+		// same global toggle (ctrl+u) as every other secret. Path/Domain/flags
+		// below are not secret and stay visible.
+		value := c.Value
+		if !rv.revealSecrets && value != "" {
+			value = "****"
+		}
+		fmt.Fprintf(&b, "%s = %s\n", c.Name, value)
 		if c.Domain != "" {
 			fmt.Fprintf(&b, "  Domain: %s\n", c.Domain)
 		}
