@@ -86,6 +86,14 @@ The `junit` reporter emits one testsuite per run and one testcase per
 pass or fail on whether it sent successfully), so it drops into existing
 CI test-result dashboards.
 
+## sharing collections with a team
+
+Because collections are plain files on disk, a team can share and co-edit them
+through an ordinary git repository - pull teammates' changes, push your own, no
+server involved. Secret-holding and per-user files stay local via a git-ignore
+template. See [docs/collaboration.md](docs/collaboration.md) for the full
+workflow.
+
 ## install
 
 macOS and Linux have prebuilt binaries; anything else uses Go.
