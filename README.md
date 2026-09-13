@@ -122,6 +122,9 @@ above. Omit `<path>` to run the whole collection.
     parley version    print the version
     parley help       show the top-level command summary
 
+Inside the TUI, press `?` for the keybindings overlay or `ctrl+k` for the
+command palette. A full key reference lives in [CHEATSHEET.md](CHEATSHEET.md).
+
 ## license
 
 MIT - see [LICENSE](LICENSE).
