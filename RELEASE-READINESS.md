@@ -20,12 +20,10 @@ adversarially-verified fix round. Living doc - update as items close.
 ## must-do before 1.0
 
 ### release safety
-- [ ] add CI: run go build, go vet, go test, go test -race, and deadcode on
-      every push and PR. the project's own pitch is "runs in CI" but it has
-      no CI - a broken commit can currently be tagged and shipped.
-- [ ] add a LICENSE file. the repo is public and distributed via brew/curl/
-      go install, but with no license it is all-rights-reserved by default,
-      which blocks the homebrew-tap and installer model.
+- [x] add CI: go build, go vet, go test -race, and a deadcode gate run on
+      every push to main and every PR (.github/workflows/ci.yml). verified
+      green on GitHub before merge.
+- [x] add a LICENSE file. MIT, added at repo root with a README section.
 - [ ] confirm the release build injects the version ldflag (the committed
       .goreleaser.yaml does this; run `goreleaser check` on the release host
       and cut a tagged release so shipped binaries stop reporting "dev").
@@ -47,13 +45,14 @@ adversarially-verified fix round. Living doc - update as items close.
 - [ ] dashboard overview is now cached; the run-history filter/scan and the
       performance section still scan on filter changes. fine at current
       scale, revisit if run history grows large.
-- [ ] history.jsonl is unbounded on disk and fully re-parsed on every history
-      modal open (the "last 50" is display-only). add a disk cap or windowed
-      read, matching the WS transcript cap pattern.
+- [x] history.jsonl is now capped on disk (maxHistoryEntries, oldest evicted
+      on append via an atomic rewrite), which also bounds ListHistory's parse
+      cost. append is per-send, not a hot path, so trimming there is cheap.
 
 ### test coverage gaps (foundational, thin)
-- [ ] internal/platform/fsstore is at ~17 percent. it is the shared storage
-      foundation every on-disk store sits on. raise it.
+- [x] internal/platform/fsstore raised from ~17 to 100 percent - round-trip
+      tests for RequestToFile/RequestFromFile (HTTP, WebSocket, zero-value,
+      disabled auth/refresh gating, timeout conversion).
 - [ ] internal/netcheck (~43 percent) and cmd/parley TUI-launch path (~45
       percent, partly inherent since the TUI needs a tty). cover what can be
       covered without a tty.
