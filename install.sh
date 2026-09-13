@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/dhitalkamal/parley/main/install.sh | sh
 #
 # Overrides (env vars):
-#   PARLEY_VERSION=v0.1.1     pin a specific release instead of the latest
+#   PARLEY_VERSION=v0.2.0     pin a specific release instead of the latest
 #   PARLEY_BIN_DIR=/some/bin  install into a specific directory
 set -e
 
@@ -44,7 +44,18 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
 echo "parley: downloading ${version} (${os}/${arch})..."
-curl -fsSL "$url" -o "$tmp/$asset"
+# --progress-bar shows a live download bar (the asset is a few MB, so a silent
+# curl -s looked like a hang on slow links). -f fails on http errors, -L
+# follows the release redirect to the asset CDN. Fall back to wget if curl is
+# absent.
+if command -v curl >/dev/null 2>&1; then
+	curl -fL --progress-bar "$url" -o "$tmp/$asset"
+elif command -v wget >/dev/null 2>&1; then
+	wget --show-progress -qO "$tmp/$asset" "$url"
+else
+	echo "parley: need curl or wget to download" >&2
+	exit 1
+fi
 tar -C "$tmp" -xzf "$tmp/$asset"
 
 # pick an install dir: first writable of the usual spots, else ~/.local/bin.
@@ -57,10 +68,11 @@ if [ -z "$bindir" ]; then
 		fi
 	done
 fi
-if [ -z "$bindir" ]; then
-	bindir="$HOME/.local/bin"
-	mkdir -p "$bindir"
-fi
+[ -z "$bindir" ] && bindir="$HOME/.local/bin"
+# always ensure the target exists - a PARLEY_BIN_DIR pointing at a missing
+# directory used to make the install silently fail while still printing
+# "installed". mkdir -p failing (e.g. not writable) exits here via set -e.
+mkdir -p "$bindir"
 
 install -m 0755 "$tmp/$BINARY" "$bindir/$BINARY" 2>/dev/null ||
 	{ mv "$tmp/$BINARY" "$bindir/$BINARY" && chmod 0755 "$bindir/$BINARY"; }
