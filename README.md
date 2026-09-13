@@ -121,3 +121,7 @@ above. Omit `<path>` to run the whole collection.
 
     parley version    print the version
     parley help       show the top-level command summary
+
+## license
+
+MIT - see [LICENSE](LICENSE).
