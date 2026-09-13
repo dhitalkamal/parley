@@ -2,6 +2,7 @@ package historystore
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -40,7 +41,22 @@ type historyLine struct {
 	Err         string              `json:"err,omitempty"`
 }
 
+// maxHistoryEntries bounds how many sent-request records history.jsonl keeps
+// on disk. Older entries are evicted on append so a long-lived install cannot
+// grow the file (or ListHistory's whole-file parse) without bound. The history
+// modal shows fewer than this, so the on-disk cap sits comfortably above what
+// is ever displayed. A var, not a const, so tests can shrink it. Appends
+// happen per-send (not a hot path), so trimming on each append is cheap enough.
+var maxHistoryEntries = 500
+
 func (s *HistoryStore) AppendHistory(entry history.HistoryEntry) error {
+	if err := s.appendLine(entry); err != nil {
+		return err
+	}
+	return s.trimToCap(maxHistoryEntries)
+}
+
+func (s *HistoryStore) appendLine(entry history.HistoryEntry) error {
 	if err := os.MkdirAll(s.ProjectRoot, 0o755); err != nil {
 		return err
 	}
@@ -72,6 +88,48 @@ func (s *HistoryStore) AppendHistory(entry history.HistoryEntry) error {
 	}
 	_, err = f.Write(append(data, '\n'))
 	return err
+}
+
+// trimToCap rewrites history.jsonl to keep only its last cap lines (the newest
+// entries, since the file is append-order oldest-first). It reads the whole
+// file, and when over the cap writes the kept lines to a temp file and renames
+// it into place - an atomic replace, so a crash mid-trim cannot corrupt or
+// truncate the log. A no-op when the file is within the cap.
+func (s *HistoryStore) trimToCap(cap int) error {
+	data, err := os.ReadFile(s.path())
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	lines := bytes.Split(bytes.TrimRight(data, "\n"), []byte{'\n'})
+	if len(lines) <= cap {
+		return nil
+	}
+	kept := lines[len(lines)-cap:]
+	out := append(bytes.Join(kept, []byte{'\n'}), '\n')
+
+	tmp, err := os.CreateTemp(s.ProjectRoot, "history-*.jsonl.tmp")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if err := tmp.Chmod(0o600); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if _, err := tmp.Write(out); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, s.path())
 }
 
 func (s *HistoryStore) ListHistory() ([]history.HistoryEntry, error) {

@@ -174,3 +174,54 @@ func TestHistoryStore_StoredAsJSONLAtProjectRoot(t *testing.T) {
 		t.Errorf("expected history.jsonl at project root: %v", err)
 	}
 }
+
+func TestHistoryStore_AppendEvictsOldestBeyondCap(t *testing.T) {
+	// shrink the on-disk cap for the test, restore after.
+	prev := maxHistoryEntries
+	maxHistoryEntries = 3
+	t.Cleanup(func() { maxHistoryEntries = prev })
+
+	s := New(t.TempDir())
+	for i := 0; i < 6; i++ {
+		entry := history.HistoryEntry{
+			Time:    time.Date(2026, 1, 1, 0, 0, i, 0, time.UTC),
+			Request: collection.Request{Method: collection.GET, URL: "https://example.com"},
+			Status:  "200 OK",
+			// tag each entry so we can tell which survived; RequestPath round-trips.
+			RequestPath: "req-" + string(rune('0'+i)),
+		}
+		if err := s.AppendHistory(entry); err != nil {
+			t.Fatalf("append %d error: %v", i, err)
+		}
+	}
+
+	entries, err := s.ListHistory()
+	if err != nil {
+		t.Fatalf("list error: %v", err)
+	}
+	// only the 3 newest are kept, and ListHistory returns newest-first.
+	if len(entries) != 3 {
+		t.Fatalf("kept %d entries, want 3 (cap)", len(entries))
+	}
+	wantNewestFirst := []string{"req-5", "req-4", "req-3"}
+	for i, want := range wantNewestFirst {
+		if entries[i].RequestPath != want {
+			t.Errorf("entries[%d].RequestPath = %q, want %q", i, entries[i].RequestPath, want)
+		}
+	}
+
+	// the file on disk is bounded too, not just the returned slice.
+	data, err := os.ReadFile(filepath.Join(s.ProjectRoot, "history.jsonl"))
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	lines := 0
+	for _, b := range data {
+		if b == '\n' {
+			lines++
+		}
+	}
+	if lines != 3 {
+		t.Errorf("history.jsonl has %d lines, want 3", lines)
+	}
+}
