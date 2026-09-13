@@ -53,20 +53,27 @@ adversarially-verified fix round. Living doc - update as items close.
 - [x] internal/platform/fsstore raised from ~17 to 100 percent - round-trip
       tests for RequestToFile/RequestFromFile (HTTP, WebSocket, zero-value,
       disabled auth/refresh gating, timeout conversion).
-- [ ] internal/netcheck (~43 percent) and cmd/parley TUI-launch path (~45
-      percent, partly inherent since the TUI needs a tty). cover what can be
-      covered without a tty.
+- [x] internal/netcheck raised from ~43 to ~91 percent (defaultListInterfaces
+      and hasRoutableAddr covered against the real loopback interface). the
+      remaining gap is the routable-IP-present branch, which needs a real
+      routed interface the test host may not have.
+- [ ] cmd/parley TUI-launch path (~45 percent) is partly inherent since the
+      TUI needs a tty; cover what can be covered without one.
 
 ### error-path UX
 - [ ] audit user-facing error messages for actionability. the pre-fix
       `could not open a new TTY` was cryptic; sweep for similar.
-- [ ] responsive sidebar: below ~80 columns the fixed-width sidebar takes
-      half the screen. add a breakpoint to hide or shrink it.
+- [ ] responsive sidebar (DECISION): a breakpoint already exists - the
+      sidebar drops out entirely below minWidthForSidebar (60 cols). the open
+      question is the 60-90 col band, where the fixed-width sidebar is present
+      but proportionally large. shrinking it or raising the threshold there is
+      a UX-preference call (a higher threshold hides it for normal terminals),
+      so it is left for a deliberate decision rather than guessed.
 
 ### secrets
-- [ ] masking now covers common secret keys and the headers tab, but the
-      Cookies tab still renders cookie values. decide whether to mask there
-      too.
+- [x] the Cookies tab now masks cookie values by default (session tokens are
+      inherently sensitive), revealable with the same ctrl+u toggle. Path/
+      Domain/flags stay visible.
 - [ ] history.jsonl and last_responses.json are now 0600 but still store
       credentials in cleartext on disk. decide whether at-rest values should
       be redacted, not just permission-gated.
