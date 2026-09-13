@@ -1,6 +1,7 @@
 package netcheck
 
 import (
+	"net"
 	"strings"
 	"testing"
 )
@@ -77,4 +78,43 @@ func TestDetectVPNs_ReportsMultiple(t *testing.T) {
 	if s := strings.Join(DetectVPNs(), ", "); s != "tailscale0, backend-kamal" {
 		t.Errorf("DetectVPN() = %q, want the two joined", s)
 	}
+}
+
+// TestDefaultListInterfaces_MarksLoopback exercises the real OS interface
+// enumeration (the production listInterfaces): every host has a loopback, and
+// it must be flagged loopback with no routable IP. Skips on the rare host with
+// no loopback rather than failing.
+func TestDefaultListInterfaces_MarksLoopback(t *testing.T) {
+	ifaces := defaultListInterfaces()
+	found := false
+	for _, i := range ifaces {
+		if i.loopback {
+			found = true
+			if i.hasRoutableIP {
+				t.Errorf("loopback %q reported a routable IP, want false", i.name)
+			}
+		}
+	}
+	if !found {
+		t.Skip("no loopback interface on this host")
+	}
+}
+
+// TestHasRoutableAddr_LoopbackHasNone covers hasRoutableAddr against a real
+// interface: a loopback carries only loopback/link-local addresses, so it must
+// report no routable address.
+func TestHasRoutableAddr_LoopbackHasNone(t *testing.T) {
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		t.Skipf("cannot list interfaces: %v", err)
+	}
+	for _, ni := range ifaces {
+		if ni.Flags&net.FlagLoopback != 0 {
+			if hasRoutableAddr(ni) {
+				t.Errorf("loopback %q has a routable addr, want false", ni.Name)
+			}
+			return
+		}
+	}
+	t.Skip("no loopback interface on this host")
 }
