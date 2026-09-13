@@ -1,0 +1,19 @@
+# parley shared-collection ignore list.
+# copy to .gitignore at the root of your shared workspace directory.
+# share: collections/ (requests and folders).
+# keep local: per-user state, runtime logs, and anything holding secrets.
+# see docs/collaboration.md for the full workflow.
+
+# per-user / machine-specific
+workspaces.json
+active_environment
+
+# runtime logs and caches (can contain credentials and response bodies)
+history.jsonl
+last_responses.json
+runs.jsonl
+
+# environment values can hold secrets - kept local until the secret-split
+# model lands (see docs/collaboration.md "roadmap").
+environments/
+globals.json
