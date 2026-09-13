@@ -1,0 +1,46 @@
+# ci runs the same checks the project relies on locally - build, vet, the
+# race-enabled test suite, and a deadcode gate - on every push to main and
+# every pull request, so a broken commit cannot be merged or tagged.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# cancel an in-progress run when a newer commit is pushed to the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # read the exact toolchain from go.mod so ci never drifts from local.
+          go-version-file: go.mod
+          cache: true
+
+      - name: build
+        run: go build ./...
+
+      - name: vet
+        run: go vet ./...
+
+      - name: test (race)
+        run: go test -race ./...
+
+      - name: deadcode
+        # fail if any function is unreachable from main. deadcode prints
+        # findings but exits 0, so treat any output as a failure.
+        run: |
+          out=$(go run golang.org/x/tools/cmd/deadcode@latest ./...)
+          if [ -n "$out" ]; then
+            echo "deadcode found unreachable functions:"
+            echo "$out"
+            exit 1
+          fi
