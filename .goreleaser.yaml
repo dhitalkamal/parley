@@ -51,6 +51,10 @@ brews:
     repository:
       owner: dhitalkamal
       name: homebrew-tap
+    # write the formula into the tap's Formula/ directory, matching the tap's
+    # convention (mdo lives there too). without this, goreleaser wrote to the
+    # repo root, which homebrew shadows behind any Formula/parley.rb.
+    directory: Formula
     homepage: "https://github.com/dhitalkamal/parley"
     description: "Terminal API client: collections, environments, auth, scripting, WebSocket testing"
     install: |
