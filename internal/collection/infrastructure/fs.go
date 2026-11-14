@@ -214,7 +214,11 @@ func (s *Store) LoadRequest(path string) (collection.Request, error) {
 	if err != nil {
 		return collection.Request{}, err
 	}
-	return decodeRequest(data)
+	req, err := decodeRequest(data)
+	if err != nil {
+		return collection.Request{}, fmt.Errorf("invalid request file %s (fix the JSON or remove the file): %w", abs, err)
+	}
+	return req, nil
 }
 
 func (s *Store) SaveRequest(parentPath, name string, req collection.Request) (string, error) {

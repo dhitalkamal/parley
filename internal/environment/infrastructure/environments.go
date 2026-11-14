@@ -2,6 +2,7 @@ package environmentstore
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -55,7 +56,7 @@ func (s *EnvStore) LoadEnvironment(name string) (environment.Environment, error)
 	}
 	env, err := decodeEnvironment(data)
 	if err != nil {
-		return environment.Environment{}, err
+		return environment.Environment{}, fmt.Errorf("invalid environment file %s (fix the JSON or remove the file): %w", filepath.Join(s.environmentsDir(), name+".json"), err)
 	}
 	env.Name = name
 	return env, nil
@@ -96,7 +97,7 @@ func (s *EnvStore) LoadGlobals() (environment.Environment, error) {
 	}
 	env, err := decodeEnvironment(data)
 	if err != nil {
-		return environment.Environment{}, err
+		return environment.Environment{}, fmt.Errorf("invalid environment file %s (fix the JSON or remove the file): %w", s.globalsPath(), err)
 	}
 	env.Name = "globals"
 	return env, nil

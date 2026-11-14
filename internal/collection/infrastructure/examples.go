@@ -2,6 +2,7 @@ package collectionstore
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -59,13 +60,14 @@ func (s *Store) ListExamples(requestPath string) ([]string, error) {
 }
 
 func (s *Store) LoadExample(path string) (collection.Example, error) {
-	data, err := os.ReadFile(filepath.Join(s.Root, path))
+	abs := filepath.Join(s.Root, path)
+	data, err := os.ReadFile(abs)
 	if err != nil {
 		return collection.Example{}, err
 	}
 	ex, err := decodeExample(data)
 	if err != nil {
-		return collection.Example{}, err
+		return collection.Example{}, fmt.Errorf("invalid example file %s (fix the JSON or remove the file): %w", abs, err)
 	}
 	ex.Name = strings.TrimSuffix(filepath.Base(path), ".json")
 	return ex, nil

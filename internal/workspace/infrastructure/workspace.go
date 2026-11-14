@@ -2,6 +2,7 @@ package workspacestore
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -42,7 +43,7 @@ func (s *WorkspaceStore) load() (workspaceFile, error) {
 	}
 	var f workspaceFile
 	if err := json.Unmarshal(data, &f); err != nil {
-		return workspaceFile{}, err
+		return workspaceFile{}, fmt.Errorf("workspaces file %s is not valid JSON (fix it or move it aside): %w", s.RegistryPath, err)
 	}
 	return f, nil
 }

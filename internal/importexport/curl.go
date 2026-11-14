@@ -85,7 +85,7 @@ func ParseCurl(command string) (collection.Request, error) {
 	}
 
 	if rawURL == "" {
-		return collection.Request{}, errors.New("curl command has no URL")
+		return collection.Request{}, errors.New("no URL found (add one, e.g. curl https://example.com)")
 	}
 
 	bodyText := strings.Join(dataParts, "&")

@@ -21,27 +21,34 @@ func ParseAny(input string) (ImportedNode, error) {
 	if strings.HasPrefix(strings.ToLower(trimmed), "curl") {
 		req, err := ParseCurl(trimmed)
 		if err != nil {
-			return ImportedNode{}, err
+			return ImportedNode{}, fmt.Errorf("invalid curl command: %w", err)
 		}
 		return ImportedNode{Name: importNameFromRequest(req), Request: &req}, nil
 	}
 
 	var probe map[string]interface{}
 	if err := yaml.Unmarshal([]byte(trimmed), &probe); err == nil {
-		if _, ok := probe["openapi"]; ok {
-			return ParseOpenAPICollection([]byte(trimmed))
-		}
-		if _, ok := probe["swagger"]; ok {
-			return ParseOpenAPICollection([]byte(trimmed))
+		_, hasOpenAPI := probe["openapi"]
+		_, hasSwagger := probe["swagger"]
+		if hasOpenAPI || hasSwagger {
+			node, err := ParseOpenAPICollection([]byte(trimmed))
+			if err != nil {
+				return ImportedNode{}, fmt.Errorf("invalid OpenAPI spec: %w", err)
+			}
+			return node, nil
 		}
 		if _, hasInfo := probe["info"]; hasInfo {
 			if _, hasItem := probe["item"]; hasItem {
-				return ParsePostmanCollection([]byte(trimmed))
+				node, err := ParsePostmanCollection([]byte(trimmed))
+				if err != nil {
+					return ImportedNode{}, fmt.Errorf("invalid Postman collection: %w", err)
+				}
+				return node, nil
 			}
 		}
 	}
 
-	return ImportedNode{}, fmt.Errorf("unrecognized import format (expected a curl command, a Postman v2.1 collection, or an OpenAPI 3 spec)")
+	return ImportedNode{}, fmt.Errorf("unrecognized import format: expected a curl command, a Postman v2.1 collection (needs \"info\" and \"item\"), or an OpenAPI 3 spec (needs \"openapi\"); paste the content or give a file path")
 }
 
 // importNameFromRequest derives a reasonable request name from a curl
