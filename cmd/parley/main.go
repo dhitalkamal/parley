@@ -124,6 +124,10 @@ func runCLICommand(args []string, home string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error:", err)
 		return cli.ExitUsageError
 	}
+	// best-effort: a failure must not change the run or its exit code
+	if w := permissionWarning(tightenWorkspaces(workspaces)); w != "" {
+		fmt.Fprintln(stderr, w)
+	}
 
 	name := *workspaceName
 	if name == "" {
@@ -243,6 +247,8 @@ func buildModel() (tui.Model, error) {
 	}
 
 	m := tui.New(active.CollectionsRoot, active.ProjectRoot)
+	// stderr is hidden by the alt screen, so a failed sweep goes to the status row
+	m.SetStartupNotice(permissionWarning(tightenWorkspaces(workspaces)))
 	m.SetWorkspaces(wsStore, workspaces, active.Name, filepath.Join(home, "workspaces"))
 	return m, nil
 }
