@@ -2,8 +2,11 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"strings"
 	"time"
 
 	collection "github.com/dhitalkamal/parley/internal/collection/domain"
@@ -113,12 +116,25 @@ func loadScriptContext(opts Options) (scripting.ScriptContext, error) {
 
 	if opts.EnvName != "" {
 		env, err := opts.EnvStore.LoadEnvironment(opts.EnvName)
+		if errors.Is(err, fs.ErrNotExist) {
+			return scripting.ScriptContext{}, missingEnvironmentErr(opts.EnvStore, opts.EnvName)
+		}
 		if err != nil {
 			return scripting.ScriptContext{}, fmt.Errorf("cli: loading environment %q: %w", opts.EnvName, err)
 		}
 		scriptCtx.Environment = enabledVars(env.Variables)
 	}
 	return scriptCtx, nil
+}
+
+// missingEnvironmentErr names the environments that do exist, when the store
+// can list them, so a typo in --env is a one-glance fix.
+func missingEnvironmentErr(store environment.EnvironmentStore, name string) error {
+	names, err := store.ListEnvironments()
+	if err != nil || len(names) == 0 {
+		return fmt.Errorf("cli: no environment named %q in this workspace (none exist yet; create one in the parley TUI)", name)
+	}
+	return fmt.Errorf("cli: no environment named %q in this workspace (available: %s)", name, strings.Join(names, ", "))
 }
 
 func enabledVars(vars []environment.Variable) map[string]string {

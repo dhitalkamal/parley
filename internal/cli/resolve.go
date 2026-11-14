@@ -27,7 +27,10 @@ func ResolveRequestPaths(tree collection.TreeNode, namePath string) ([]string, e
 	}
 	paths := collection.RequestPathsUnder(node)
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("cli: %q contains no requests", namePath)
+		if namePath == "" {
+			return nil, fmt.Errorf("cli: the collection has no requests to run (add some in the parley TUI first)")
+		}
+		return nil, fmt.Errorf("cli: folder %q has no requests to run", namePath)
 	}
 	return paths, nil
 }
@@ -40,7 +43,8 @@ func resolveNode(tree collection.TreeNode, namePath string) (collection.TreeNode
 	for _, seg := range strings.Split(namePath, "/") {
 		child, ok := findChildByName(current, seg)
 		if !ok {
-			return collection.TreeNode{}, fmt.Errorf("cli: no folder or request named %q in %q", seg, namePath)
+			return collection.TreeNode{}, fmt.Errorf("cli: no folder or request named %q in path %q (paths match folder and request names, like users/get;%s omit the path to run everything)",
+				seg, namePath, availableNames(current))
 		}
 		current = child
 	}
@@ -54,4 +58,17 @@ func findChildByName(node collection.TreeNode, name string) (collection.TreeNode
 		}
 	}
 	return collection.TreeNode{}, false
+}
+
+// availableNames renders " available here: a, b;" for the children of node,
+// or "" when it has none, so the unknown-path message can point at real choices.
+func availableNames(node collection.TreeNode) string {
+	if len(node.Children) == 0 {
+		return ""
+	}
+	names := make([]string, len(node.Children))
+	for i, c := range node.Children {
+		names[i] = c.Name
+	}
+	return " available here: " + strings.Join(names, ", ") + ";"
 }
