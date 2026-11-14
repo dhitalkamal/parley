@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	execution "github.com/dhitalkamal/parley/internal/execution/domain"
 	history "github.com/dhitalkamal/parley/internal/history/domain"
 	"strings"
 
@@ -53,7 +54,9 @@ func (m Model) handleHistoryKey(k tea.KeyMsg) (Model, tea.Cmd) {
 		m.history.active = false
 		m.status = "Re-running..."
 		m.beginSending()
-		return m, tea.Batch(sendReqCmd(m.client, entry.Request, entry.Request, false), sendTickCmd())
+		// old entries hold resolved values and no placeholders, so this is a no-op for them
+		req, _ := execution.SubstituteRequest(entry.Request, m.resolvedVars())
+		return m, tea.Batch(sendReqCmd(m.client, entry.Request, req, false), sendTickCmd())
 	}
 	return m, nil
 }
