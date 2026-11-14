@@ -6,6 +6,7 @@ import (
 	scripting "github.com/dhitalkamal/parley/internal/scripting/domain"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -157,5 +158,74 @@ func TestRunStore_StoredAsJSONLAtProjectRoot(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "runs.jsonl")); err != nil {
 		t.Errorf("expected runs.jsonl at project root: %v", err)
+	}
+}
+
+func runsPerm(t *testing.T, dir string) os.FileMode {
+	t.Helper()
+	info, err := os.Stat(filepath.Join(dir, "runs.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.Mode().Perm()
+}
+
+func TestRunStore_AppendCreatesFileOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits")
+	}
+	dir := t.TempDir()
+	if err := NewRunStore(dir).AppendRun(history.CollectionRunEntry{Path: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := runsPerm(t, dir); got != 0o600 {
+		t.Errorf("perm = %o, want 600", got)
+	}
+}
+
+func TestRunStore_AppendTightensExistingLooseFile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits")
+	}
+	dir := t.TempDir()
+	p := filepath.Join(dir, "runs.jsonl")
+	if err := os.WriteFile(p, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(p, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewRunStore(dir).AppendRun(history.CollectionRunEntry{Path: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := runsPerm(t, dir); got != 0o600 {
+		t.Errorf("perm = %o, want 600", got)
+	}
+}
+
+func TestRunStore_DeleteRunRewriteIsOwnerOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits")
+	}
+	dir := t.TempDir()
+	s := NewRunStore(dir)
+	for _, p := range []string{"a", "b"} {
+		if err := s.AppendRun(history.CollectionRunEntry{Path: p}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// loosen after the appends so only the rewrite can restore 0600
+	if err := os.Chmod(filepath.Join(dir, "runs.jsonl"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := s.ListRuns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteRun(entries[0]); err != nil {
+		t.Fatal(err)
+	}
+	if got := runsPerm(t, dir); got != 0o600 {
+		t.Errorf("perm after rewrite = %o, want 600", got)
 	}
 }

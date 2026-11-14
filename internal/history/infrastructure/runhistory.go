@@ -39,11 +39,16 @@ func (s *RunStore) AppendRun(entry history.CollectionRunEntry) error {
 	if err := os.MkdirAll(s.ProjectRoot, 0o755); err != nil {
 		return err
 	}
-	f, err := os.OpenFile(s.path(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	// run logs hold response bodies, so owner-only; Chmod tightens a file an
+	// older build created at 0644 (O_CREATE only sets the mode on new files).
+	f, err := os.OpenFile(s.path(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	if err := f.Chmod(0o600); err != nil {
+		return err
+	}
 
 	data, err := json.Marshal(entry)
 	if err != nil {
@@ -136,8 +141,12 @@ func (s *RunStore) DeleteRun(target history.CollectionRunEntry) error {
 	}
 
 	tmpPath := s.path() + ".tmp"
-	out, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+	out, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
+		return err
+	}
+	if err := out.Chmod(0o600); err != nil {
+		out.Close()
 		return err
 	}
 	for _, line := range kept {
