@@ -56,7 +56,8 @@ brews:
     # repo root, which homebrew shadows behind any Formula/parley.rb.
     directory: Formula
     homepage: "https://github.com/dhitalkamal/parley"
-    description: "Terminal API client: collections, environments, auth, scripting, WebSocket testing"
+    # brew audit caps desc at 80 chars
+    description: "Terminal API client: collections, environments, auth, scripting, WebSockets"
     install: |
       bin.install "parley"
     test: |
