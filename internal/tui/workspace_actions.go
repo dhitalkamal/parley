@@ -40,6 +40,13 @@ func (m *Model) SetWorkspaces(ws workspace.WorkspaceStore, workspaces []workspac
 	}
 }
 
+// SetStartupNotice shows msg on the bottom row of the request screen until
+// the first keypress. main.go uses it for best-effort startup warnings that
+// would be hidden by the alt screen if printed to stderr.
+func (m *Model) SetStartupNotice(msg string) {
+	m.startupNotice = msg
+}
+
 // openWorkspaceSwitcher shows the Workspaces modal, starting on whichever
 // entry is currently active.
 func (m *Model) openWorkspaceSwitcher() {

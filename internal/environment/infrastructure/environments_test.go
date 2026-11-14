@@ -4,6 +4,7 @@ import (
 	environment "github.com/dhitalkamal/parley/internal/environment/domain"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -227,4 +228,51 @@ func TestEnvStore_SecretFilesWrittenWithRestrictivePerms(t *testing.T) {
 	assertPerm(filepath.Join(root, "environments", "prod.json"), 0o600)
 	assertPerm(filepath.Join(root, "globals.json"), 0o600)
 	assertPerm(filepath.Join(root, "active_environment"), 0o600)
+}
+
+// os.WriteFile only applies its perm when it creates the file, so files left
+// at 0644 by an older build must be tightened on the next save.
+func TestEnvStore_ResaveTightensExistingLooseFiles(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix permission bits")
+	}
+	root := t.TempDir()
+	s := New(root)
+	env := environment.Environment{Name: "local"}
+	paths := []string{
+		filepath.Join(root, "environments", "local.json"),
+		filepath.Join(root, "globals.json"),
+		filepath.Join(root, "active_environment"),
+	}
+	if err := os.MkdirAll(filepath.Join(root, "environments"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range paths {
+		if err := os.WriteFile(p, []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chmod(p, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := s.SaveEnvironment(env); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveGlobals(env); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetActiveName("local"); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, p := range paths {
+		info, err := os.Stat(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := info.Mode().Perm(); got != 0o600 {
+			t.Errorf("%s perm = %o, want 600", p, got)
+		}
+	}
 }

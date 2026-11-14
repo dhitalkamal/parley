@@ -75,7 +75,7 @@ func (s *EnvStore) SaveEnvironment(env environment.Environment) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(s.environmentsDir(), env.Name+".json"), data, 0o600)
+	return fsstore.WriteOwnerOnly(filepath.Join(s.environmentsDir(), env.Name+".json"), data)
 }
 
 func (s *EnvStore) DeleteEnvironment(name string) error {
@@ -111,7 +111,7 @@ func (s *EnvStore) SaveGlobals(env environment.Environment) error {
 		return err
 	}
 	// globals.json can hold secret-flagged variables, so keep it owner-only.
-	return os.WriteFile(s.globalsPath(), data, 0o600)
+	return fsstore.WriteOwnerOnly(s.globalsPath(), data)
 }
 
 func (s *EnvStore) activeNamePath() string {
@@ -146,7 +146,7 @@ func (s *EnvStore) SetActiveName(name string) error {
 	if err := os.MkdirAll(s.ProjectRoot, 0o755); err != nil {
 		return err
 	}
-	return os.WriteFile(s.activeNamePath(), []byte(name), 0o600)
+	return fsstore.WriteOwnerOnly(s.activeNamePath(), []byte(name))
 }
 
 type variableFile struct {

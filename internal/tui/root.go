@@ -177,8 +177,11 @@ type Model struct {
 	pendingG bool
 	reqTab   reqTab
 	status   string
-	width    int
-	height   int
+	// startupNotice is a one-shot message from the composition root (see
+	// SetStartupNotice), drawn on the bottom row until the first keypress.
+	startupNotice string
+	width         int
+	height        int
 
 	// detectedVPNs are the VPN/tunnel interfaces currently up on this machine
 	// (empty for none), refreshed once a second off the clock tick - see
@@ -373,6 +376,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleRunResult(msg), nil
 
 	case tea.KeyMsg:
+		m.startupNotice = ""
 		return m.autosaveAfter(m.handleKey(msg))
 
 	case tea.MouseMsg:

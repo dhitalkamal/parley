@@ -111,6 +111,11 @@ func (m Model) View() string {
 	if m.screen == ScreenRequest && !m.modalActive() {
 		ind := m.modeIndicator()
 		background = overlayAt(background, ind, m.width, m.height, m.width-lipgloss.Width(ind), m.height-1)
+		if m.startupNotice != "" {
+			// leave room for the mode indicator on the right
+			note := truncate(m.startupNotice, m.width-lipgloss.Width(ind)-2)
+			background = overlayAt(background, labelStyle.Render(note), m.width, m.height, 0, m.height-1)
+		}
 	}
 
 	switch {
