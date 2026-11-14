@@ -22,8 +22,10 @@ Keep local (git-ignored - see the template below):
 - `workspaces.json` - machine-specific: it stores absolute paths.
 - `active_environment` - a per-user choice, not a team fact.
 - `history.jsonl`, `last_responses.json`, `runs.jsonl` - per-user runtime logs.
-  These can contain credentials and full response bodies, so they must never be
-  committed.
+  History is saved before `{{variable}}` substitution, so secrets that come from
+  environments are not in it, but values typed directly into a request are, and
+  `last_responses.json` holds full response bodies (login responses often carry
+  tokens). Never commit these files.
 - `environments/`, `globals.json` - environment values can hold secrets
   (tokens, passwords). They are kept local for now. Sharing environment
   structure safely is the secret-split model described under "roadmap" below,
