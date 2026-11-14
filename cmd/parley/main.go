@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -111,6 +112,7 @@ func runCLICommand(args []string, home string, stdout, stderr io.Writer) int {
 		return cli.ExitUsageError
 	}
 	if fs.NArg() > 1 {
+		fmt.Fprintf(stderr, "error: parley run takes at most one path, got %d (quote a path that contains spaces)\n", fs.NArg())
 		fmt.Fprintln(stderr, "usage: parley run [flags] [collection-or-request-path]")
 		return cli.ExitUsageError
 	}
@@ -141,7 +143,7 @@ func runCLICommand(args []string, home string, stdout, stderr io.Writer) int {
 		// is only right for the persisted active-name case, e.g. after that
 		// workspace was deleted) - a CI run silently testing the wrong
 		// environment is worse than one that refuses to start.
-		fmt.Fprintf(stderr, "error: no workspace named %q\n", name)
+		fmt.Fprintf(stderr, "error: no workspace named %q (available: %s)\n", name, workspaceNames(workspaces))
 		return cli.ExitUsageError
 	}
 	active, err := selectWorkspace(workspaces, name)
@@ -154,7 +156,7 @@ func runCLICommand(args []string, home string, stdout, stderr io.Writer) int {
 	if *outPath != "" {
 		f, err := os.Create(*outPath)
 		if err != nil {
-			fmt.Fprintln(stderr, "error:", err)
+			fmt.Fprintf(stderr, "error: cannot create the --out file: %v (check that the directory exists and is writable)\n", err)
 			return cli.ExitUsageError
 		}
 		defer f.Close()
@@ -191,6 +193,14 @@ func selectWorkspace(workspaces []workspace.Workspace, name string) (workspace.W
 		}
 	}
 	return workspaces[0], nil
+}
+
+func workspaceNames(workspaces []workspace.Workspace) string {
+	names := make([]string, len(workspaces))
+	for i, w := range workspaces {
+		names[i] = w.Name
+	}
+	return strings.Join(names, ", ")
 }
 
 func workspaceExists(workspaces []workspace.Workspace, name string) bool {
