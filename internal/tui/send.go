@@ -146,12 +146,11 @@ func (m *Model) applyScriptContext(ctx scripting.ScriptContext) {
 }
 
 // sendReqCmd executes an already-resolved request. Shared by a normal send
-// (built and substituted from the editor), a history quick re-run (already
-// resolved, replayed exactly as it went out originally), and a post-refresh
-// retry (send_refresh.go). rawReq is carried through purely so a 401 on
-// this send can re-substitute and retry once more after another refresh -
-// callers with no meaningful "raw" form (history re-runs) just pass the
-// same request for both.
+// (built and substituted from the editor), a history quick re-run (stored
+// template re-resolved against current variables), and a post-refresh
+// retry (send_refresh.go). rawReq is carried through so a 401 on this send
+// can re-substitute and retry once more after another refresh, and so
+// history records the template instead of resolved secrets.
 func sendReqCmd(client execution.HTTPClient, rawReq, req collection.Request, retried bool) tea.Cmd {
 	return func() tea.Msg {
 		resp, err := execapp.SendRequest(context.Background(), client, req)
@@ -166,7 +165,8 @@ func sendReqCmd(client execution.HTTPClient, rawReq, req collection.Request, ret
 // (see send_refresh.go) instead of just showing the failure.
 func (m Model) handleSendResult(msg sendResultMsg) (Model, tea.Cmd) {
 	m.sending = false
-	entry := history.HistoryEntry{Time: time.Now(), RequestPath: m.loadedRequestPath, Request: msg.req}
+	// rawReq, not req: the resolved request carries secrets from {{vars}}
+	entry := history.HistoryEntry{Time: time.Now(), RequestPath: m.loadedRequestPath, Request: msg.rawReq}
 	if msg.err != nil {
 		entry.Err = msg.err.Error()
 		m.status = "Error"
