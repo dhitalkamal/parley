@@ -6,8 +6,8 @@ import (
 	collection "github.com/dhitalkamal/parley/internal/collection/domain"
 )
 
-// HistoryEntry is one row of the append-only send history: the exact
-// (already variable-resolved) request that went out, and what came back.
+// HistoryEntry is one row of the append-only send history: the request and
+// what came back.
 // Err is set instead of StatusCode/Status when the send itself failed.
 type HistoryEntry struct {
 	Time time.Time
@@ -20,9 +20,12 @@ type HistoryEntry struct {
 	// saved request a given send belonged to (URL/Method alone can collide,
 	// or drift after variable substitution).
 	RequestPath string
-	Request     collection.Request
-	StatusCode  int
-	Status      string
-	ElapsedMS   int64
-	Err         string
+	// Request is the request as defined, before {{var}} substitution, so
+	// secrets that come from variables never reach disk. Entries written by
+	// older versions hold resolved values instead.
+	Request    collection.Request
+	StatusCode int
+	Status     string
+	ElapsedMS  int64
+	Err        string
 }
