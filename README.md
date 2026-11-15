@@ -52,7 +52,9 @@ tool.
 - import: curl commands, Postman Collection v2.1, and OpenAPI 3 (JSON or
   YAML), with format auto-detection
 - code generation: turn a saved request back into a curl command or Go code
-- history: the last 50 requests sent, restorable from a modal
+- history: the last 50 requests sent, restorable from a modal. entries are
+  saved before `{{variable}}` substitution, so secrets from environments are
+  not written to history, and a re-run uses the current values
 - `parley run`: execute a saved collection or request headlessly, for CI
   (see below)
 

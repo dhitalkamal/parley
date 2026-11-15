@@ -24,18 +24,24 @@ adversarially-verified fix round. Living doc - update as items close.
       every push to main and every PR (.github/workflows/ci.yml). verified
       green on GitHub before merge.
 - [x] add a LICENSE file. MIT, added at repo root with a README section.
-- [ ] confirm the release build injects the version ldflag (the committed
-      .goreleaser.yaml does this; run `goreleaser check` on the release host
-      and cut a tagged release so shipped binaries stop reporting "dev").
+- [x] confirm the release build injects the version ldflag. v0.2.0 was cut
+      from .goreleaser.yaml and `parley version` reports 0.2.0. note:
+      goreleaser v2.16 fully deprecates the `brews` section used for the
+      homebrew formula; it keeps working until goreleaser v3 (see
+      nice-to-have).
 
 ### storage format
 - [ ] decide and document whether the on-disk format (collections/,
       environments/, workspaces.json, jsonl histories) is frozen for 1.0.
       README says it "may still change" - 1.0 should commit to it or version
-      it.
-- [ ] migration story for the file-permission tightening (0644 -> 0600):
-      existing users' files keep their old permissions until rewritten.
-      decide whether to proactively re-chmod on startup.
+      it. deferred: a markdown-based request format is under consideration,
+      so the freeze waits for that decision.
+- [x] migration story for the file-permission tightening (0644 -> 0600):
+      every secret-file writer now enforces 0600 on existing files too, and a
+      best-effort startup sweep re-chmods environments/*.json, globals.json,
+      active_environment, history.jsonl, last_responses.json and runs.jsonl
+      in every registered workspace (collections/ is left alone). a failed
+      sweep shows one warning and never blocks startup. (v0.3.0, #12)
 
 ### perf follow-ups (partials that were improved but not fully closed)
 - [ ] websocket transcript render is bounded (cap 5000 + block cache) but
@@ -57,29 +63,44 @@ adversarially-verified fix round. Living doc - update as items close.
       and hasRoutableAddr covered against the real loopback interface). the
       remaining gap is the routable-IP-present branch, which needs a real
       routed interface the test host may not have.
-- [ ] cmd/parley TUI-launch path (~45 percent) is partly inherent since the
-      TUI needs a tty; cover what can be covered without one.
+- [x] cmd/parley launch path raised from ~45 to ~86 percent (dataHome,
+      buildModel, runCLICommand, workspace selection, the permission sweep).
+      main() and tea.NewProgram still need a tty. (v0.3.0, #12, #14)
 
 ### error-path UX
-- [ ] audit user-facing error messages for actionability. the pre-fix
-      `could not open a new TTY` was cryptic; sweep for similar.
-- [ ] responsive sidebar (DECISION): a breakpoint already exists - the
-      sidebar drops out entirely below minWidthForSidebar (60 cols). the open
-      question is the 60-90 col band, where the fixed-width sidebar is present
-      but proportionally large. shrinking it or raising the threshold there is
-      a UX-preference call (a higher threshold hides it for normal terminals),
-      so it is left for a deliberate decision rather than guessed.
+- [x] audit user-facing error messages for actionability: `parley run`
+      workspace, environment, path and --out errors list the valid choices or
+      the next step, corrupt JSON errors name the file, and import errors say
+      which format failed. (v0.3.0, #15)
+- [x] responsive sidebar (DECISION, 2026-11-14): keep the current behavior.
+      the sidebar drops out below minWidthForSidebar (60 cols) and stays
+      fixed-width above it; adaptive sizing in the 60-90 col band moves to
+      nice-to-have.
 
 ### secrets
 - [x] the Cookies tab now masks cookie values by default (session tokens are
       inherently sensitive), revealable with the same ctrl+u toggle. Path/
       Domain/flags stay visible.
-- [ ] history.jsonl and last_responses.json are now 0600 but still store
-      credentials in cleartext on disk. decide whether at-rest values should
-      be redacted, not just permission-gated.
+- [x] at-rest secrets (DECISION, 2026-11-14): history.jsonl stores each
+      request before {{variable}} substitution, so secrets that come from
+      environments never reach it, and a history re-run resolves current
+      values. values typed directly into a request are stored as typed, and
+      entries written by older versions roll off after 50 sends.
+      last_responses.json keeps full responses (login responses can carry
+      tokens) and stays owner-only. (v0.3.0, #13)
 
 ## nice-to-have (post-1.0)
 
-- [ ] responsive/adaptive layouts beyond the current graceful floor.
+- [ ] responsive/adaptive layouts beyond the current graceful floor,
+      including sidebar sizing in the 60-90 col band.
 - [ ] configurable transcript/history caps.
 - [ ] a `parley --help` that also documents PARLEY_HOME / XDG_CONFIG_HOME.
+- [ ] cap runs.jsonl the way history.jsonl is capped; it grows without bound.
+- [ ] tui Model.status is written in many places but never rendered; render
+      it or drop the writes.
+- [ ] a request with an empty URL shows Go's raw `unsupported protocol
+      scheme ""` error.
+- [ ] `parley run` checks the path before --reporter, so a bad path hides a
+      bad reporter value.
+- [ ] move the homebrew formula from goreleaser `brews` to `homebrew_casks`,
+      tap-wide together with mdo; unsigned binaries need a quarantine step.

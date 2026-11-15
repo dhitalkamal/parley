@@ -115,4 +115,3 @@ func DetectVPNs() []string {
 	}
 	return names
 }
-
