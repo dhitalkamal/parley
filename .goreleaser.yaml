@@ -51,6 +51,15 @@ brews:
     repository:
       owner: dhitalkamal
       name: homebrew-tap
+      # never push to the tap's main: the formula goes to a chore/ branch and
+      # goreleaser opens a pr against main, same as the manual tap bumps
+      branch: "chore/bump-parley-{{ .Version }}"
+      pull_request:
+        enabled: true
+        base:
+          owner: dhitalkamal
+          name: homebrew-tap
+          branch: main
     # write the formula into the tap's Formula/ directory, matching the tap's
     # convention (mdo lives there too). without this, goreleaser wrote to the
     # repo root, which homebrew shadows behind any Formula/parley.rb.
