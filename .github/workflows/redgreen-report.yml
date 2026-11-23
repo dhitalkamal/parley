@@ -1,0 +1,16 @@
+# stage 2 of redgreen: runs from the default branch with permission to
+# comment, never runs pull request code, and publishes the stage 1 result.
+name: redgreen report
+on:
+  workflow_run:
+    workflows: [redgreen]
+    types: [completed]
+permissions:
+  actions: read
+  checks: write
+  pull-requests: write
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: dhitalkamal/redgreen/report@v1

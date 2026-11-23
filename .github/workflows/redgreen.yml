@@ -1,0 +1,27 @@
+# redgreen runs the tests a pull request adds or changes with and without its
+# code change, so a fix only gets "proof found" when its test fails without it.
+# stage 2 (redgreen-report.yml) posts the result from the default branch.
+name: redgreen
+on: pull_request
+permissions:
+  contents: read
+concurrency:
+  group: redgreen-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go install gotest.tools/gotestsum@v1.12.3
+      - uses: dhitalkamal/redgreen@v1
+        with:
+          test-command: gotestsum --junitfile junit.xml -- ./...
+          junit-path: junit.xml
+          install-command: go mod download
