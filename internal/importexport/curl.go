@@ -126,8 +126,13 @@ func ParseCurl(command string) (collection.Request, error) {
 
 	if parsed, err := url.Parse(rawURL); err == nil && parsed.RawQuery != "" {
 		req.Params = collection.ParseQueryParams(rawURL)
-		parsed.RawQuery = ""
-		req.URL = parsed.String()
+		// cut the raw string instead of using parsed.String(), which
+		// percent-encodes {{var}} placeholders in the path.
+		base, rest, _ := strings.Cut(rawURL, "?")
+		if _, frag, ok := strings.Cut(rest, "#"); ok {
+			base += "#" + frag
+		}
+		req.URL = base
 	} else {
 		req.URL = rawURL
 	}
