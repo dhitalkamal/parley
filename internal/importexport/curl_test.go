@@ -160,3 +160,26 @@ func TestParseCurl_UrlFlagAccepted(t *testing.T) {
 		t.Errorf("got %+v", req)
 	}
 }
+
+func TestParseCurl_QueryStringKeepsPlaceholdersInURL(t *testing.T) {
+	cases := []struct {
+		cmd     string
+		wantURL string
+	}{
+		{`curl '{{base}}/users/{{id}}?active=true'`, "{{base}}/users/{{id}}"},
+		{`curl 'https://api.example.com/users/{{id}}?active=true'`, "https://api.example.com/users/{{id}}"},
+		{`curl 'https://api.example.com/users/{{id}}?active=true#top'`, "https://api.example.com/users/{{id}}#top"},
+	}
+	for _, c := range cases {
+		req, err := ParseCurl(c.cmd)
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", c.cmd, err)
+		}
+		if req.URL != c.wantURL {
+			t.Errorf("%s: url = %q, want %q", c.cmd, req.URL, c.wantURL)
+		}
+		if len(req.Params) != 1 || req.Params[0].Key != "active" || req.Params[0].Value != "true" {
+			t.Errorf("%s: params = %+v, want active=true", c.cmd, req.Params)
+		}
+	}
+}
